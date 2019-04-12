@@ -6,7 +6,7 @@ This repository contains Bash scripts for running pipelines on QEST CI server.
 ### How to install
 Copy scripts to CI server and run `chmod +x` on all of them.
 
-### Provided templates
+### Provided scripts
 | Script         | Description                                                    |
 |----------------|----------------------------------------------------------------|
 | twine_pull.sh  | Refresh all strings from twine repository                      |
