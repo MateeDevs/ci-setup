@@ -1,5 +1,5 @@
-# Bash scripts for QEST CI server
-This repository contains Bash scripts for running pipelines on QEST CI server.
+# Bash scripts for Matee CI server
+This repository contains Bash scripts for running pipelines on Matee CI server.
 
 ## Scripts
 
