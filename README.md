@@ -1,4 +1,5 @@
 # Bash scripts for Matee CI server
+:warning: DEPRECATED - Use [GitHub Actions](https://github.com/features/actions) instead :warning:   
 This repository contains Bash scripts for running pipelines on Matee CI server.
 
 ## Scripts
