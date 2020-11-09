@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>cz.matee.github-actions.ios-build.plist</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/zsh</string>
+		<string>-l</string>
+		<string>/Users/filletzz/Develop/actions/matee-ios-build/run.sh</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/filletzz/Develop/actions/matee-ios-build</string>
+</dict>
+</plist>
