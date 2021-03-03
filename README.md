@@ -15,6 +15,8 @@ This repository contains utilities for managing [GitHub Actions runners](https:/
 |   |   |   +-- _work - symlink to ../_work
 |   |   +-- matee-ios-prod - runner for production distribution   
 |   |   |   +-- _work - symlink to ../_work
+|   |   +-- matee-ios-internal - runner for internal distribution
+|   |       +-- _work - symlink to ../_work
 ```
 
 ## Launchd tasks
@@ -28,12 +30,13 @@ This repository contains utilities for managing [GitHub Actions runners](https:/
 - Cron can't be used because it can't access keychains that are created by fastlane.
 
 ### Provided tasks
-| Task                                    | Description               |
-|-----------------------------------------|---------------------------|
-| cz.matee.github-actions.ios-build.plist | Task for ios-build runner |
-| cz.matee.github-actions.ios-alpha.plist | Task for ios-alpha runner |
-| cz.matee.github-actions.ios-beta.plist  | Task for ios-beta runner  |
-| cz.matee.github-actions.ios-prod.plist  | Task for ios-prod runner  |
+| Task                                       | Description                  |
+|--------------------------------------------|------------------------------|
+| cz.matee.github-actions.ios-build.plist    | Task for ios-build runner    |
+| cz.matee.github-actions.ios-alpha.plist    | Task for ios-alpha runner    |
+| cz.matee.github-actions.ios-beta.plist     | Task for ios-beta runner     |
+| cz.matee.github-actions.ios-prod.plist     | Task for ios-prod runner     |
+| cz.matee.github-actions.ios-internal.plist | Task for ios-internal runner |
 
 ## Scripts
 
