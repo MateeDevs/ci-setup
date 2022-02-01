@@ -9,7 +9,7 @@ This repository contains utilities for managing [GitHub Actions runners](https:/
 |   |   +-- _work
 |   |   +-- matee-ios-build - runner for builds and tests
 |   |   |   +-- _work - symlink to ../_work
-|   |   +-- matee-ios-alpha` - runner for alpha distribution   
+|   |   +-- matee-ios-alpha - runner for alpha distribution   
 |   |   |   +-- _work - symlink to ../_work
 |   |   +-- matee-ios-beta - runner for beta distribution
 |   |   |   +-- _work - symlink to ../_work
@@ -21,12 +21,15 @@ This repository contains utilities for managing [GitHub Actions runners](https:/
 
 ## Launchd tasks
 
+⚠️ Deprecated - use [official service configuration](https://docs.github.com/en/actions/hosting-your-own-runners/configuring-the-self-hosted-runner-application-as-a-service) ⚠️
+
 ### How to use
 - Copy tasks into `~/Library/LaunchAgents` and restart CI server.
 - Tasks will start runners automatically after log in and also check them every hour and rerun when needed.
 - You can also load/unload them manually via `launchctl load`/`launchctl unload`.
 - More info about Launchd [here](https://stackoverflow.com/questions/132955/how-do-i-set-a-task-to-run-every-so-often) and [here](https://serverfault.com/questions/183589/how-do-i-activate-launchd-logging-on-os-x)
 - Still buggy ATM, because of GitHub runners auto update - [related issue](https://github.com/actions/runner/issues/485)
+- Update Feb 2022: Auto update [can be disabled](https://github.blog/changelog/2022-02-01-github-actions-self-hosted-runners-can-now-disable-automatic-updates/), but then you will need to manually update your runner within 30 days of a new runner version being available.
 - Cron can't be used because it can't access keychains that are created by fastlane.
 
 ### Provided tasks
