@@ -22,6 +22,7 @@ This repository contains utilities for managing [GitHub Actions runners](https:/
 ## Launchd tasks
 
 ⚠️ Deprecated - use [official service configuration](https://docs.github.com/en/actions/hosting-your-own-runners/configuring-the-self-hosted-runner-application-as-a-service) ⚠️
+- Just make sure that all services starts unders login zsh (by adding `/bin/zsh -l` to ProgramArguments)
 
 ### How to use
 - Copy tasks into `~/Library/LaunchAgents` and restart CI server.
@@ -47,7 +48,9 @@ This repository contains utilities for managing [GitHub Actions runners](https:/
 - Copy scripts to `~/Develop/actions` and run them manually when needed.
 
 ### Provided scripts
-| Script  | Description      |
-|---------|------------------|
-| run.sh  | Run all runners  |
-| stop.sh | Stop all runners |
+| Script           | Description                    |
+|------------------|--------------------------------|
+| start.sh         | Start all runners (deprecated) |
+| stop.sh          | Stop all runners (deprecated)  |
+| start-service.sh | Start all runners as services  |
+| stop-service.sh  | Stop all runner services       |
