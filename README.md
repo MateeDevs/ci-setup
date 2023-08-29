@@ -48,9 +48,10 @@ This repository contains utilities for managing [GitHub Actions runners](https:/
 - Copy scripts to `~/Develop/actions` and run them manually when needed.
 
 ### Provided scripts
-| Script           | Description                    |
-|------------------|--------------------------------|
-| start.sh         | Start all runners (deprecated) |
-| stop.sh          | Stop all runners (deprecated)  |
-| start-service.sh | Start all runners as services  |
-| stop-service.sh  | Stop all runner services       |
+| Script                | Description                    |
+|-----------------------|--------------------------------|
+| start.sh              | Start all runners (deprecated) |
+| stop.sh               | Stop all runners (deprecated)  |
+| start-service.sh      | Start all runners as services  |
+| stop-service.sh       | Stop all runner services       |
+| reinstall-service.sh  | Reinstall all runner services  |
