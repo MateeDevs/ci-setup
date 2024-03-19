@@ -1,3 +1,6 @@
+# Example build commands:
+# $ docker build -t base-tools .
+
 FROM ubuntu:22.04
 
 # Avoid being asked interactive questions when installing packages

@@ -42,7 +42,8 @@ ARG ARCH=x86_64 \
 
 ENV EMULATOR_PACKAGE=system-images;android-${EMULATOR_API_LEVEL};${TARGET};${ARCH} \
     EMULATOR_NAME=$EMULATOR_NAME \
-    EMULATOR_DEVICE=$EMULATOR_DEVICE
+    EMULATOR_DEVICE=$EMULATOR_DEVICE \
+    ANDROID_AVD_HOME="/root/.android/avd"
 
 # Install emulator tools
 RUN sdkmanager "${EMULATOR_PACKAGE}" "emulator"
@@ -56,13 +57,10 @@ RUN echo "no" | avdmanager create avd --force --name "${EMULATOR_NAME}" --device
 COPY . /
 
 # Add permissions for emulator launch scripts ans VNC start script
-RUN chmod a+x start_emu_headless.sh
-RUN chmod a+x start_emu.sh
-RUN chmod a+x start_vnc.sh
+RUN chmod a+x /emu_scripts/start_emu_headless.sh && \
+    chmod a+x /emu_scripts/start_emu.sh && \
+    chmod a+x /emu_scripts/start_vnc.sh
 
-# Launch and wait for AN emulator
-CMD ./start_emu_headless.sh
-
-
-
+# Add script and emulator to the PATH
+ENV PATH=$PATH:/emu_scripts:$ANDROID_SDK_ROOT/emulator
 
