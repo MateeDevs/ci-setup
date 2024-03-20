@@ -44,16 +44,8 @@ Configured runners:
 - Gitlab
 - Jetbrains Space
 
-Github and Gitlab runners are running as services and will automatically start after the system reboot. ⚠️ **Runner for Space does not yet support this functionality and needs to be launched manually**. 
+Github and Gitlab runners are running as services and will automatically start after the system reboot.
 
-`~/Matee/space-runner`
-```bash;
-sudo ./worker.sh start --serverUrl https://matee.jetbrains.space --token {RUNNER_TOKEN}
-```
-or
-```bash;
-sudo ./space_run.sh
-```
 ### Github runner troubleshooting 
 Runner directory path `~/Matee/actions-runner/` 
 
@@ -68,4 +60,27 @@ sudo ./svc.sh start
 ```bash;
 # Single runner start, won´t survive system reboot
 ./run.sh
+```
+### Gitlab runner troubleshooting 
+Gitlab runner is **gitlab-runner** binary
+
+```bash;
+# Check service status
+sudo gitlab-runner status
+```
+```bash;
+# Start runner service
+sudo gitlab-runner start
+```
+
+### Jetbrains Space runner troubleshooting 
+⚠️ **Runner for Space does not yet support service functionality and needs to be launched manually**. 
+
+Runner directory path `~/Matee/space-runner`
+```bash;
+sudo ./worker.sh start --serverUrl https://matee.jetbrains.space --token {RUNNER_TOKEN}
+```
+or
+```bash;
+sudo ./space_run.sh
 ```
