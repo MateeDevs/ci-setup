@@ -33,7 +33,7 @@ Dir structure:
 |   |   |   |  +-- skyseat/
 ...
 ```
-Every directory should contain a `Dockerfile` which specifies an environment used for image build and commented example of build commands.  e.g. `~/Matee/docker/java`:
+Every directory should contain a `Dockerfile` which specifies an environment used for image build and an example of build commands.  e.g. `~/Matee/docker/java`:
 ```bash
 docker build -t java-17 .
 ```
@@ -44,7 +44,7 @@ Configured runners:
 - Gitlab
 - Jetbrains Space
 
-Github and Gitlab runners are configured as services and will automatically run after the system reboot. ⚠️ **Runner for Space does not yet support this functionality and needs to be launched manually**. 
+Github and Gitlab runners are running as services and will automatically start after the system reboot. ⚠️ **Runner for Space does not yet support this functionality and needs to be launched manually**. 
 
 `~/Matee/space-runner`
 ```bash;
@@ -53,4 +53,19 @@ sudo ./worker.sh start --serverUrl https://matee.jetbrains.space --token {RUNNER
 or
 ```bash;
 sudo ./space_run.sh
+```
+### Github runner troubleshooting 
+Runner directory path `~/Matee/actions-runner/` 
+
+```bash;
+# Check service status
+sudo ./svc.sh status
+```
+```bash;
+# Start runner service
+sudo ./svc.sh start 
+```
+```bash;
+# Single runner start, won´t survive system reboot
+./run.sh
 ```
