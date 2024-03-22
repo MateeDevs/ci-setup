@@ -28,12 +28,12 @@ Dir structure:
 |   |   |   |  +-- android/
 |   |   |   |   |  +-- emulator/
 |   |   |   |  +-- java/
-|   |   |   |  +-- repeato/
-|   |   |   |  +-- stravenky/
-|   |   |   |  +-- skyseat/
+|   |   |   |  +-- gradle+kotlin/
+|   |   |   |   |  +-- gradle/
+|   |   |   |  +-- twine/
 ...
 ```
-Every directory should contain a `Dockerfile` which specifies an environment used for image build and an example of build commands.  e.g. `~/Matee/docker/java`:
+Every directory should contain a `Dockerfile` which specifies an image build environment and an example of build commands.  e.g. `~/Matee/docker/java`:
 ```bash
 docker build -t java-17 .
 ```
@@ -84,3 +84,52 @@ or
 ```bash;
 sudo ./space_run.sh
 ```
+
+# Docker images
+Available docker images can be shown by:
+```bash;
+docker images
+```
+![Snímek obrazovky z 2024-03-22 13-05-18](https://github.com/MateeDevs/ci-setup/assets/31855599/b8087310-e061-4aa6-801b-21c530c202cd)
+
+Images with `mateedevs/` preffix are published on [Dockerhub](https://hub.docker.com/). Every image shoud have some description of inlcuded tools.
+| `mateedevs/charmander-emulator image` |
+|:--:| 
+| ![Snímek obrazovky z 2024-03-22 13-31-10](https://github.com/MateeDevs/ci-setup/assets/31855599/2649fd68-95e4-44c7-9f28-6b13ed2795a4) | 
+
+## Image build
+`Dockerfile` is needed to build a docker image. Base files can be found inside `~/Matee/docker` directory. This directory contains docker files to build images for Java, AndroidSDK, gradle+kotlin, Twine or Android emulator. 
+
+To build an image, navigate to a desired directory and run:
+```bash;
+docker build -t {IMAGE_NAME} .
+```
+`-t` image tag name (e.g. java-17)
+
+`.`  current directory (location of `Dockerfile`)
+
+Most of the base docker files are generic and image builds can be parametrized or default parametrs are used.
+
+### Example Java image build
+To build a Java 17 image we can use default parameters of the docker file or we can use build arguments.
+
+```bash;
+docker build -t java-17 .
+```
+```bash;
+docker build --build-arg VERSION=17 -t java-17 .
+```
+
+or for Java 11:
+```bash;
+docker build --build-arg VERSION=11 -t java-11 .
+```
+
+### Example Android image build
+Java and AndroidSDK is needed to run android build commands. We can use previously created image as base to build an android image with specific version of Java.
+
+```bash;
+docker build --build-arg JAVA_IMAGE=java-17 -t j17-android .
+```
+
+
