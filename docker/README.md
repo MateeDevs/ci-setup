@@ -131,5 +131,20 @@ Java and AndroidSDK is needed to run android build commands. We can use previous
 ```bash;
 docker build --build-arg JAVA_IMAGE=java-17 -t j17-android .
 ```
+Once the android sdk image is ready we can add Gradle and Kotlin to speed up CI build time. This step is not necessary to build android projects as Kotlin and Gradle are downloaded by their plugins. 
+
+`~/Matee/docker/images/gradle+kotlin` contains `gradle` directory, `gradlew` file and `Dockerfile`. This dir structure is default for `gradlew` to correctly fetch Gradle. Gradle version which will be installed is defined in `~/Matee/docker/images/gradle+kotlin/gradle/wrapper/gradle-wrapper-properties`. Currently is set to `8.2.1-all`. 
+
+Kotlin version is defined in `Dockerfile` and is set to `1.9.21`.
+
+We can use same steps to create gradle+kotlin image as for example above (use `j17-anroid` image as base):
+
+```bash;
+docker build --build-arg ANDROID_IMAGE=j17-android -t j17-android-gradle .
+```
+
+
+
+
 
 
