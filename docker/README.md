@@ -143,8 +143,21 @@ We can use same steps to create gradle+kotlin image as for example above (use `j
 docker build --build-arg ANDROID_IMAGE=j17-android -t j17-android-gradle .
 ```
 
+### Docker hub
+Images must be stored in some Docker registry in order to be pulled in Github/Gitlab ... jobs. Matee images are stored in [Dockerhub](https://hub.docker.com/repositories/mateedevs). We could also create a private docker registry which would be hosted on CI machine but using Dockerhub is more convinient.  
 
+Login is needed to push images into Docker hub:
 
+```bash;
+# This step is redundant as Matee should already be logged in on CI machine.  
+docker login
+```
+Push image: 
+
+```bash;
+docker push mateedevs/bulbasaur
+```
+Image should be ready to use after that.
 
 
 
