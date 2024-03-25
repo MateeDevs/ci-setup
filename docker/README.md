@@ -212,5 +212,26 @@ Docker executor is set for gitlab runner so there is no need to define anything 
 ...
 ```
 
+## Jetbrains Space CI
+
+Similar to Github actions.
+
+```
+job("[AN] Build Debug") {
+...
+    container(
+        displayName = "Lint&Build",
+        image = "mateedevs/charmander",
+    ) {
+        kotlinScript { api ->
+            api.gradlew("ktlintCheck")
+        }
+    }
+...
+}
+```
+
+
+
 
 
