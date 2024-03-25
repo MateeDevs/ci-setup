@@ -106,7 +106,7 @@ docker build -t {IMAGE_NAME} .
 ```
 `-t` image tag name (e.g. java-17)
 
-`.`  current directory (location of `Dockerfile`)
+`.`  current directory (`Dockerfile` location)
 
 Most of the base docker files are generic and image builds can be parametrized or default parametrs are used.
 
@@ -126,7 +126,7 @@ docker build --build-arg VERSION=11 -t java-11 .
 ```
 
 ### Example Android image build
-Java and AndroidSDK is needed to run android build commands. We can use previously created image as base to build an android image with specific version of Java.
+Java and AndroidSDK is needed to run android build commands. We can use previously created image as base to build an android image with specific Java version.
 
 ```bash;
 docker build --build-arg JAVA_IMAGE=java-17 -t j17-android .
