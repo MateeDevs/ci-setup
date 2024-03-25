@@ -159,5 +159,58 @@ docker push mateedevs/bulbasaur
 ```
 Image should be ready to use after that.
 
+# Docker usage
+
+## Github action
+
+**Basic example:**
+
+```
+jobs:
+  Check:
+    name: Lint & Build
+    runs-on: [self-hosted, pikachu]
+    container: mateedevs/charmander
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Run lint
+        run: ./gradlew ktlintCheck
+...
+```
+`container` - runner will create a docker container in which job will run 
+`mateedevs/charmander` - container image
+
+**Volume example:**
+
+Some projects might depend on files which are not part of a repository (e.g. Stravenky version file). Docker volume can be used to solve this usecase. 
+
+```
+jobs:
+  build:
+    name: Create new build
+    runs-on: [ self-hosted, pikachu ]
+    container:
+      image: mateedevs/charmander
+      volumes:
+        - version-stravenky:/__w/version-stravenky
+...
+```
+`volumes` - creates a volume which will be shared between docker and local file system
+
+⚠️ Beaware that local Github runner home file structure is different to container file structure (e.g. `/work` -> `/__w`). Update script files accordingly if needed (e.g. `/muj-up/scripts/version_code_generator.sh`).
+
+## Gitlab CI
+
+Docker executor is set for gitlab runner so there is no need to define anything else besides an image.  
+
+```
+.android:
+  image: mateedevs/bulbasaur
+  before_script:
+...
+```
+
 
 
