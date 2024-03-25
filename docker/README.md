@@ -200,7 +200,7 @@ jobs:
 ```
 `volumes` - creates a volume which will be shared between docker and local file system
 
-⚠️ Beaware that local Github runner home file structure is different to container file structure (e.g. `/work` -> `/__w`). Update script files accordingly if needed (e.g. `/muj-up/scripts/version_code_generator.sh`).
+⚠️ Beaware that local Github runner home file structure is different from container file structure (e.g. `/work` -> `/__w`). Update script files accordingly if needed (e.g. `/muj-up/scripts/version_code_generator.sh`).
 
 ## Gitlab CI
 
