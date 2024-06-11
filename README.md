@@ -1,4 +1,4 @@
-# Matee CI
+# Matee CI/CD server setup
 
 ## Content
 - [macOS](/mac)

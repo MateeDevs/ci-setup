@@ -2,12 +2,6 @@
 
 Matee Unix CI in combination with [Docker](https://www.docker.com/) is currently used for Android projects and it's running on dedicated machine with Ubuntu.
 
-Supported projects:
-- [Stravenky](https://github.com/MateeDevs/muj-up)
-- [Repeato](https://gitlab.com/repeato/kmm)
-- [Skyseat](https://github.com/MateeDevs/SkySeat)
-
-
 # Machine overview
 
 Current OS is Ubuntu 22.04 and there is not much applications/tools besides Docker and Java.
