@@ -7,10 +7,10 @@ ARG ANDROID_IMAGE=j17-android
 
 FROM ${ANDROID_IMAGE}
 
-ENV KOTLIN_VERSION 1.9.21
-ENV KOTLIN_COMPILER kotlin-native-prebuilt-linux-x86_64-${KOTLIN_VERSION}
+ENV KOTLIN_VERSION 2.2.0
+ENV KOTLIN_COMPILER kotlin-native-prebuilt-${KOTLIN_VERSION}-linux-x86_64
 
-RUN wget "https://download.jetbrains.com/kotlin/native/builds/releases/${KOTLIN_VERSION}/linux-x86_64/${KOTLIN_COMPILER}.tar.gz" -q --show-progress --progress=bar:force 2>&1 &&\
+RUN wget "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-native-prebuilt/${KOTLIN_VERSION}/${KOTLIN_COMPILER}.tar.gz" -q --show-progress --progress=bar:force 2>&1 &&\
     mkdir -p /root/.konan/${KOTLIN_COMPILER} &&\
     tar -xzvf ${KOTLIN_COMPILER}.tar.gz -C /root/.konan &&\
     rm ${KOTLIN_COMPILER}.tar.gz

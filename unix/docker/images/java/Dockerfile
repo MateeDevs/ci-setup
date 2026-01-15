@@ -7,6 +7,8 @@ FROM base-tools
 # Java 17 is default
 ARG VERSION=17
 
+RUN echo ${VERSION}
+
 # Install java ${VERSION}
 RUN apt-get update && apt-get install -y \
     openjdk-${VERSION}-jdk

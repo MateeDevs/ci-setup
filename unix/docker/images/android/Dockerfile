@@ -7,6 +7,8 @@ ARG JAVA_IMAGE=java-17
 
 FROM ${JAVA_IMAGE}
 
+RUN echo ${JAVA_IMAGE}
+
 ENV ANDROID_SDK_ROOT="/usr/local/android-sdk"
 ENV PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
 
@@ -25,13 +27,15 @@ RUN yes | sdkmanager --licenses
 
 RUN echo y | sdkmanager "tools" && \
     echo y | sdkmanager "platform-tools" && \
+    echo y | sdkmanager "build-tools;35.0.0" && \
     echo y | sdkmanager "build-tools;34.0.0" && \
     echo y | sdkmanager "build-tools;33.0.2" && \
     echo y | sdkmanager "build-tools;33.0.1" && \
     echo y | sdkmanager "build-tools;32.1.0-rc1" && \	
     echo y | sdkmanager "build-tools;30.0.3"
 
-RUN echo y | sdkmanager "platforms;android-34" && \
+RUN echo y | sdkmanager "platforms;android-35" && \
+    echo y | sdkmanager "platforms;android-34" && \
     echo y | sdkmanager "platforms;android-33" && \
     echo y | sdkmanager "platforms;android-32" && \
     echo y | sdkmanager "platforms;android-31"
