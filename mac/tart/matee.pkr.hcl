@@ -55,6 +55,7 @@ build {
 
       "echo '--- Post-install setup ---'",
       "xcodebuild -downloadPlatform ios",
+      "xcodebuild -downloadPlatform tvOS",
       "xcodebuild -runFirstLaunch",
       "sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license",
       "defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES",
