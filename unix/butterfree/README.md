@@ -211,7 +211,7 @@ contains the current tags and component versions. Butterfree first makes sure
 that all resolved tags are on Docker Hub. Then, the user must approve the
 description update.
 
-Each image also contains OCI labels and `io.matee.butterfree.*` labels. These
+Each image also contains OCI labels and `cz.matee.butterfree.*` labels. These
 labels keep the version information with each historical tag.
 
 Butterfree adds the source URL to each OCI image label. It also adds the URL to
