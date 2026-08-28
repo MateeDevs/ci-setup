@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+readonly BUTTERFREE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+readonly VERSION_RESOLVER="${BUTTERFREE_VERSION_RESOLVER:-${BUTTERFREE_DIR}/fetch-latest-versions.py}"
+readonly DOCKERHUB_HELPER="${BUTTERFREE_DOCKERHUB_HELPER:-${BUTTERFREE_DIR}/dockerhub.py}"
+readonly DOCKER_COMMAND="${BUTTERFREE_DOCKER_COMMAND:-docker}"
+
+assume_yes=false
+resolver_args=()
+versions_file=""
+tag_status_file=""
+
+usage() {
+    cat <<'EOF'
+Usage: ./butterfree [OPTIONS]
+
+Interactively resolve versions, skip tags already on Docker Hub, build and push
+missing versioned tags, and update repository descriptions. Built images remain
+available locally.
+
+Options:
+  -y, --yes                  Approve all applicable workflow steps
+  --set NAME=VALUE           Override a resolved build variable (repeatable)
+  --namespace NAMESPACE      Docker Hub user or organization (default: mateedevs)
+  --ubuntu-version VERSION   Ubuntu base-image version (default: 22.04)
+  --java-version VERSION     Java major version (default: 21)
+  --emulator-api-level API   Emulator API level (default: 34)
+  --emulator-arch ARCH       Emulator architecture (default: x86_64)
+  --emulator-target TARGET   Emulator system-image target
+  --emulator-name NAME       Android Virtual Device name
+  --emulator-device DEVICE   Android Virtual Device hardware profile
+  -h, --help                 Show this help
+
+Examples:
+  ./butterfree
+  ./butterfree --yes --namespace mateedevs
+  ./butterfree \
+    --set GRADLE_VERSION=9.7.1 \
+    --set GRADLE_SHA256=acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a
+
+Run fetch-latest-versions.py --help for the complete list of overridable
+variables and checksum requirements.
+EOF
+}
+
+log() {
+    printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
+}
+
+confirm() {
+    local prompt=$1
+    local reply
+
+    if [[ "${assume_yes}" == true ]]; then
+        printf '%s [automatically approved by --yes]\n' "${prompt}"
+        return 0
+    fi
+    if [[ ! -t 0 ]]; then
+        printf 'Cannot request approval without an interactive terminal; use --yes.\n' >&2
+        return 2
+    fi
+
+    read -r -p "${prompt} [Y/n] " reply
+    [[ -z "${reply}" || "${reply}" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+remove_temp_files() {
+    if [[ -n "${versions_file}" && -f "${versions_file}" ]]; then
+        rm -f -- "${versions_file}"
+    fi
+    if [[ -n "${tag_status_file}" && -f "${tag_status_file}" ]]; then
+        rm -f -- "${tag_status_file}"
+    fi
+}
+
+trap remove_temp_files EXIT
+
+while (($#)); do
+    case "$1" in
+        -y|--yes)
+            assume_yes=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --format|--format=*)
+            printf 'butterfree manages the resolver output format internally; do not pass --format.\n' >&2
+            exit 2
+            ;;
+        *)
+            resolver_args+=("$1")
+            shift
+            ;;
+    esac
+done
+
+cd "${BUTTERFREE_DIR}"
+
+log "Step 1/5 — resolve tool versions"
+if confirm "Fetch current versions from the official release services?"; then
+    :
+else
+    approval_status=$?
+    ((approval_status == 2)) && exit 2
+    printf 'Version resolution was not approved; stopping.\n'
+    exit 0
+fi
+
+versions_file="$(mktemp "${TMPDIR:-/tmp}/butterfree-versions.XXXXXX")"
+"${VERSION_RESOLVER}" "${resolver_args[@]}" > "${versions_file}"
+# The resolver emits shell-quoted export statements and never includes secrets.
+# shellcheck disable=SC1090
+source "${versions_file}"
+
+printf '\nResolved toolchain:\n'
+printf '  Java:             %s\n' "${JAVA_VERSION}"
+printf '  Gradle:           %s\n' "${GRADLE_VERSION}"
+printf '  Kotlin:           %s\n' "${KOTLIN_VERSION}"
+printf '  Android tools:    %s\n' "${ANDROID_BUILD_TOOLS_VERSIONS}"
+printf '  Android platforms:%s\n' "${ANDROID_PLATFORM_VERSIONS}"
+printf '  Emulator/API:     %s / %s\n' "${ANDROID_EMULATOR_VERSION}" "${EMULATOR_API_LEVEL}"
+printf '  Maestro:          %s\n' "${MAESTRO_VERSION}"
+printf '\nImages:\n  %s\n  %s\n' \
+    "${BUTTERFREE_IMAGE}" "${EMULATOR_IMAGE}"
+
+declare -a build_targets=()
+declare -a image_refs=()
+dockerhub_auth_source=""
+if dockerhub_auth_source="$("${DOCKERHUB_HELPER}" auth-source)"; then
+    printf 'Docker Hub API credential source: %s\n' "${dockerhub_auth_source}"
+fi
+
+log "Step 2/5 — check Docker Hub tags"
+tag_status_file="$(mktemp "${TMPDIR:-/tmp}/butterfree-tags.XXXXXX")"
+"${DOCKERHUB_HELPER}" check-tags "${DOCKERHUB_NAMESPACE}" \
+    "butterfree=butterfree:${BUTTERFREE_IMAGE_TAG}" \
+    "emulator=butterfree:${EMULATOR_IMAGE_TAG}" > "${tag_status_file}"
+
+checked_count=0
+while IFS='=' read -r target status; do
+    ((checked_count += 1))
+    case "${target}" in
+        butterfree) image_ref=${BUTTERFREE_IMAGE} ;;
+        emulator) image_ref=${EMULATOR_IMAGE} ;;
+        *) printf 'Unexpected Docker Hub check target: %s\n' "${target}" >&2; exit 1 ;;
+    esac
+    case "${status}" in
+        exists) printf '  Exists, skipping: %s\n' "${image_ref}" ;;
+        missing)
+            printf '  Missing:          %s\n' "${image_ref}"
+            build_targets+=("${target}")
+            image_refs+=("${image_ref}")
+            ;;
+        *) printf 'Unexpected Docker Hub check status: %s\n' "${status}" >&2; exit 1 ;;
+    esac
+done < "${tag_status_file}"
+
+if ((checked_count != 2)); then
+    printf 'Docker Hub check returned %s results instead of 2.\n' "${checked_count}" >&2
+    exit 1
+fi
+
+build_status=0
+all_tags_published=true
+log "Step 3/5 — build missing images"
+if ((${#build_targets[@]} == 0)); then
+    printf 'Both versioned tags already exist; no build is needed.\n'
+elif confirm "Build and load ${#build_targets[@]} missing linux/amd64 image(s)?"; then
+    if ! "${DOCKER_COMMAND}" buildx bake --file docker-bake.hcl --load --progress=plain \
+        "${build_targets[@]}"; then
+        build_status=1
+        all_tags_published=false
+        printf 'The image build failed. Upload and description updates will be skipped.\n' >&2
+    fi
+else
+    approval_status=$?
+    ((approval_status == 2)) && exit 2
+    printf 'Build was not approved; stopping.\n'
+    exit 0
+fi
+
+upload_status=0
+log "Step 4/5 — upload missing tags"
+if ((${#image_refs[@]} == 0)); then
+    printf 'All versioned tags already exist; no upload is needed.\n'
+elif ((build_status != 0)); then
+    printf 'Upload skipped because the build failed.\n'
+elif confirm "Push ${#image_refs[@]} new versioned tag(s) to Docker Hub?"; then
+    for index in "${!image_refs[@]}"; do
+        image_ref=${image_refs[index]}
+        target=${build_targets[index]}
+        case "${target}" in
+            butterfree) tag_entry="butterfree=butterfree:${BUTTERFREE_IMAGE_TAG}" ;;
+            emulator) tag_entry="emulator=butterfree:${EMULATOR_IMAGE_TAG}" ;;
+            *) printf 'Unexpected build target: %s\n' "${target}" >&2; exit 1 ;;
+        esac
+        prepush_result="$(
+            "${DOCKERHUB_HELPER}" check-tags "${DOCKERHUB_NAMESPACE}" "${tag_entry}"
+        )"
+        prepush_status=${prepush_result#*=}
+        if [[ "${prepush_status}" == exists ]]; then
+            printf '\nTag appeared during the build; skipping push: %s\n' "${image_ref}"
+            continue
+        fi
+        if [[ "${prepush_status}" != missing ]]; then
+            printf 'Unexpected pre-push Docker Hub status: %s\n' "${prepush_status}" >&2
+            upload_status=1
+            all_tags_published=false
+            break
+        fi
+        printf '\nPushing %s\n' "${image_ref}"
+        if ! "${DOCKER_COMMAND}" push "${image_ref}"; then
+            upload_status=1
+            all_tags_published=false
+            printf 'Upload failed for %s. Remaining tags were not pushed.\n' "${image_ref}" >&2
+            break
+        fi
+    done
+else
+    approval_status=$?
+    ((approval_status == 2)) && exit 2
+    all_tags_published=false
+    printf 'Upload skipped; the built images remain available locally.\n'
+fi
+
+description_status=0
+log "Step 5/5 — update Docker Hub description"
+if [[ "${all_tags_published}" != true ]]; then
+    printf 'Description update skipped because not all resolved tags are published.\n'
+else
+    "${DOCKERHUB_HELPER}" show-descriptions
+    if [[ -z "${dockerhub_auth_source}" ]]; then
+        printf '\nDescription update unavailable: run docker login or set Docker Hub API credentials.\n'
+    elif confirm "Publish this variant and tool-version table to the butterfree repository?"; then
+        if ! "${DOCKERHUB_HELPER}" update-descriptions "${DOCKERHUB_NAMESPACE}"; then
+            description_status=1
+        fi
+    else
+        approval_status=$?
+        ((approval_status == 2)) && exit 2
+        printf 'Docker Hub description update skipped.\n'
+    fi
+fi
+
+if ((build_status != 0 || upload_status != 0 || description_status != 0)); then
+    exit 1
+fi
+
+log "Butterfree finished successfully"

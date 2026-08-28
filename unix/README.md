@@ -1,287 +1,181 @@
-# Matee CI – unix
+# Matee CI on Unix
 
-Matee Unix CI in combination with [Docker](https://www.docker.com/) is currently used for Android projects and it's running on dedicated machine with Ubuntu.
+`matee-ci` is the self-hosted Linux machine for Android CI. It runs Android
+builds and emulator tests. [Butterfree](./butterfree/README.md) builds the
+versioned Docker images for these jobs.
 
-# Machine overview
+## Host
 
-Current OS is Ubuntu 22.04 and there is not much applications/tools besides Docker and Java.
+| Component | Version |
+| --- | --- |
+| Operating system | Ubuntu 22.04 |
+| Kernel | `6.8.0-106-generic` |
+| Architecture | `x86_64` |
+| Docker client | `29.7.2` |
+| Docker Compose | `5.5.0` |
+| Host Java | `17.0.20` |
 
-| Tool                | Version                    |
-|-----------------------|--------------------------------|
-| Docker Engine | 25.0.4 |
-| Docker Compose | 2.24.7  |
-| Java | 17 |
+The host JDK runs the runner services. Butterfree containers use Java 21 by
+default for Android builds.
 
-Dir structure:
+Check the host configuration:
 
-```
-+-- matee@matee-ci
-|   +-- Matee/ 
-|   |   +-- docker/
-|   |   |   +-- base/
-|   |   |   +-- images/
-|   |   |   |  +-- android/
-|   |   |   |   |  +-- emulator/
-|   |   |   |  +-- java/
-|   |   |   |  +-- gradle+kotlin/
-|   |   |   |   |  +-- gradle/
-|   |   |   |  +-- twine/
-...
-```
-Every directory should contain a `Dockerfile` which specifies an image build environment and an example of build commands.  e.g. `~/Matee/docker/java`:
 ```bash
-docker build -t java-17 .
+uname -a
+docker version
+docker compose version
+java -version
 ```
 
-# Runners
-Configured runners:
-- Github
-- Gitlab
-- Jetbrains Space
+## Images
 
-Github and Gitlab runners are running as services and will automatically start after the system reboot.
+Butterfree publishes two variants to
+[`mateedevs/butterfree`](https://hub.docker.com/r/mateedevs/butterfree):
 
-### Github runner troubleshooting 
-Runner directory path `~/Matee/actions-runner/` 
+| Tag prefix | Purpose |
+| --- | --- |
+| `build-` | Android builds with Java, Gradle, Kotlin/Native, and the Android SDK |
+| `emulator-` | UI tests with the build toolchain, API 34 emulator, Maestro, Python, and VNC |
 
-```bash;
-# Check service status
+Each tag records its main tool versions. A fingerprint comes after these
+versions. The fingerprint represents all tool versions and archive checksums.
+Butterfree does not publish a `latest` tag. Always copy the full tag that
+Butterfree prints.
+
+Current checked-in examples:
+
+```text
+mateedevs/butterfree:build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-647f9c8f10f3
+mateedevs/butterfree:emulator-jdk21-sdk37.1-api34-maestro2.9.0-80b2146f404f
+```
+
+## Publish current versions
+
+From the root of this repository:
+
+```bash
+docker login
+cd unix/butterfree
+./butterfree
+```
+
+The Butterfree workflow has five stages:
+
+1. Get the latest stable tool versions from official sources.
+2. Check Docker Hub and skip each tag that exists.
+3. Build and load missing images.
+4. Check each tag again, and then push each missing tag.
+5. Show and publish the Docker Hub version table.
+
+Interactive prompts use `[Y/n]`. Press Enter to continue. Enter `n` to decline
+an operation. The built images and BuildKit caches stay on the host.
+
+For an unattended trusted run:
+
+```bash
+./butterfree --yes
+```
+
+Use `--set NAME=VALUE` to set a different resolved value:
+
+```bash
+./butterfree \
+  --set JAVA_VERSION=21 \
+  --set EMULATOR_API_LEVEL=34
+```
+
+If you set the version of an archive file, also set its SHA-256 value. The
+[Butterfree tutorial](./butterfree/README.md) contains all variables, manual
+Bake commands, and authentication instructions.
+
+## Use an image in CI
+
+After Butterfree publishes a newer tag, replace the example tag.
+
+### GitHub Actions: build
+
+```yaml
+jobs:
+  check:
+    runs-on: [self-hosted, pikachu]
+    container:
+      image: mateedevs/butterfree:build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-647f9c8f10f3
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./gradlew ktlintCheck build
+```
+
+### GitHub Actions: emulator
+
+```yaml
+jobs:
+  ui-test:
+    runs-on: [self-hosted, pikachu]
+    container:
+      image: mateedevs/butterfree:emulator-jdk21-sdk37.1-api34-maestro2.9.0-80b2146f404f
+      options: --device /dev/kvm
+    steps:
+      - uses: actions/checkout@v4
+      - run: start_emu_headless.sh
+      - run: ./gradlew connectedCheck
+```
+
+Each emulator image contains Maestro. Use `--privileged` only if a job needs
+more host access than `/dev/kvm`.
+
+### GitLab CI
+
+```yaml
+.android:
+  image: mateedevs/butterfree:build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-647f9c8f10f3
+```
+
+## Run the emulator manually
+
+Start a container with KVM acceleration:
+
+```bash
+docker run --interactive --tty --detach \
+  --device /dev/kvm \
+  --publish 5900:5900 \
+  --name butterfree-emulator \
+  mateedevs/butterfree:emulator-jdk21-sdk37.1-api34-maestro2.9.0-80b2146f404f
+
+docker exec butterfree-emulator start_emu_headless.sh
+```
+
+If `/dev/kvm` is unavailable, the launcher uses slower software emulation.
+
+For a windowed emulator, start VNC before the emulator:
+
+```bash
+docker exec --detach \
+  --env VNC_PASSWORD=change-me \
+  butterfree-emulator start_vnc.sh
+
+docker exec butterfree-emulator start_emu.sh
+```
+
+## Runner operations
+
+GitHub runner:
+
+```bash
+cd ~/Matee/actions-runner
 sudo ./svc.sh status
+sudo ./svc.sh start
 ```
-```bash;
-# Start runner service
-sudo ./svc.sh start 
-```
-```bash;
-# Single runner start, won´t survive system reboot
+
+Run it directly for troubleshooting:
+
+```bash
+cd ~/Matee/actions-runner
 ./run.sh
 ```
-### Gitlab runner troubleshooting 
-Gitlab runner is **gitlab-runner** binary
 
-```bash;
-# Check service status
+GitLab Runner:
+
+```bash
 sudo gitlab-runner status
-```
-```bash;
-# Start runner service
 sudo gitlab-runner start
 ```
-
-### Jetbrains Space runner troubleshooting 
-⚠️ **Runner for Space does not yet support service functionality and needs to be launched manually**. 
-
-Runner directory path `~/Matee/space-runner`
-```bash;
-sudo ./worker.sh start --serverUrl https://matee.jetbrains.space --token {RUNNER_TOKEN}
-```
-or
-```bash;
-sudo ./space_run.sh
-```
-
-# Docker images
-Available docker images can be shown by:
-```bash;
-docker images
-```
-![Snímek obrazovky z 2024-03-22 13-05-18](https://github.com/MateeDevs/ci-setup/assets/31855599/b8087310-e061-4aa6-801b-21c530c202cd)
-
-Images with `mateedevs/` preffix are published on [Dockerhub](https://hub.docker.com/). Every image shoud have some description of inlcuded tools.
-| `mateedevs/charmander-emulator image` |
-|:--:| 
-| ![Snímek obrazovky z 2024-03-22 13-31-10](https://github.com/MateeDevs/ci-setup/assets/31855599/2649fd68-95e4-44c7-9f28-6b13ed2795a4) | 
-
-## Image build
-`Dockerfile` is needed to build a docker image. Base files can be found inside `~/Matee/docker` directory. This directory contains docker files to build images for Java, AndroidSDK, gradle+kotlin, Twine or Android emulator. 
-
-To build an image, navigate to a desired directory and run:
-```bash;
-docker build -t {IMAGE_NAME} .
-```
-`-t` image tag name (e.g. java-17)
-
-`.`  current directory (`Dockerfile` location)
-
-Most of the base docker files are generic and image builds can be parametrized or default parametrs are used.
-
-### Example Java image build
-To build a Java 17 image we can use default parameters of the docker file or we can use build arguments.
-
-```bash;
-docker build -t java-17 .
-```
-```bash;
-docker build --build-arg VERSION=17 -t java-17 .
-```
-
-or for Java 11:
-```bash;
-docker build --build-arg VERSION=11 -t java-11 .
-```
-
-### Example Android image build
-Java and AndroidSDK is needed to run android build commands. We can use previously created image as base to build an android image with specific Java version.
-
-```bash;
-docker build --build-arg JAVA_IMAGE=java-17 -t j17-android .
-```
-Once the android sdk image is ready we can add Gradle and Kotlin to speed up CI build time. This step is not necessary to build android projects as Kotlin and Gradle are downloaded by their plugins. 
-
-`~/Matee/docker/images/gradle+kotlin` contains `gradle` directory, `gradlew` file and `Dockerfile`. This dir structure is default for `gradlew` to correctly fetch Gradle. Gradle version which will be installed is defined in `~/Matee/docker/images/gradle+kotlin/gradle/wrapper/gradle-wrapper-properties`. Currently is set to `8.2.1-all`. 
-
-Kotlin version is defined in `Dockerfile` and is set to `1.9.21`.
-
-We can use same steps to create gradle+kotlin image as for example above (use `j17-anroid` image as base):
-
-```bash;
-docker build --build-arg ANDROID_IMAGE=j17-android -t j17-android-gradle .
-```
-
-### Docker hub
-Images must be stored in some Docker registry in order to be pulled in Github/Gitlab ... jobs. Matee images are published on [Dockerhub](https://hub.docker.com/repositories/mateedevs). We could also create a private docker registry which would be hosted on CI machine but it is more convinient to use Dockerhub.  
-
-Login is needed to push images into Docker hub:
-
-```bash;
-# This step is redundant as Matee should already be logged in on CI machine.  
-docker login
-```
-Push image: 
-
-```bash;
-docker push mateedevs/bulbasaur
-```
-Image should be ready to use after that.
-
-# CI integration
-
-## Github action
-
-**Basic example:**
-
-```
-jobs:
-  Check:
-    name: Lint & Build
-    runs-on: [self-hosted, pikachu]
-    container: mateedevs/charmander
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      - name: Run lint
-        run: ./gradlew ktlintCheck
-...
-```
-`container` - runner will create a docker container in which job will run 
-`mateedevs/charmander` - container image
-
-**Volume example:**
-
-Some projects might depend on files which are not part of a repository (e.g. Stravenky version file). Docker volume can be used to solve this usecase. 
-
-```
-jobs:
-  build:
-    name: Create new build
-    runs-on: [ self-hosted, pikachu ]
-    container:
-      image: mateedevs/charmander
-      volumes:
-        - version-stravenky:/__w/version-stravenky
-...
-```
-`volumes` - creates a volume which will be shared between docker and local file system
-
-⚠️ Beaware that local Github runner home file structure is different from container file structure (e.g. `/work` -> `/__w`). Update script files accordingly if needed (e.g. `/muj-up/scripts/version_code_generator.sh`).
-
-## Gitlab CI
-
-Docker executor is set for gitlab runner so there is no need to define anything else besides an image.  
-
-```
-.android:
-  image: mateedevs/bulbasaur
-  before_script:
-...
-```
-
-## Jetbrains Space CI
-
-Similar to Github actions.
-
-```
-job("[AN] Build Debug") {
-...
-    container(
-        displayName = "Lint&Build",
-        image = "mateedevs/charmander",
-    ) {
-        kotlinScript { api ->
-            api.gradlew("ktlintCheck")
-        }
-    }
-...
-}
-```
-
-# Android emulator
-
-Android emulator `Dockerfile` is located in `~/Matee/docker/images/android/emulator`.
-
-Script files which can run the emulator are located in `~/Matee/docker/images/android/emulator/emu_scripts`.
-
-Corresponding Dockerhub image is `mateedevs/charmander-emulator`. This image can be used to run android UI tests.
-
-![Snímek obrazovky z 2024-03-25 16-40-33](https://github.com/MateeDevs/ci-setup/assets/31855599/cba40d9c-1972-415f-a59b-ae9abb532d07)
-
-**Github actions example:**
-
-```
-    runs-on: [self-hosted, pikachu]
-    container: 
-       image: mateedevs/charmander-emulator
-       options: --privileged
-    steps:
-      - name: UI tests
-        run: |
-          start_emu_headless.sh
-          ./gradlew :android:customer-app:connectedCheck
-...
-```
-
-`options: --privileged` - container will be created with privileged mode, needed for HW acceleration
-
-`start_emu_headless.sh` - launches android emulator in headless mode (timeout is 300s)
-
-
-`~/emu_scripts` contains several scripts to handle emulator:
-
-- `start_emu_headless.sh` - launches emulator in headless mode
-- `start_emu.sh` - launches emulator (headed mode)
-- `start_vnc.sh` - creates vnc connection between docker container and CI machine, used to test headed emulator
-
-⚠️ The `start_emu.sh` script will start the emulator in a visible mode, therefore it should not be used for integration with a pipeline such as GitHub Actions etc. Instead, use the `start_emu_headless.sh` script.
-
-**Headed android emulator**
-
-This could be useful to see what might gone wrong in your UI tests. 
-
- 1. The following command must be used to initiate the Docker container:
- ```bash;
-docker run -it -d -p 5900:5900 --name androidContainer -e VNC_PASSWORD=123 --privileged j17-android-emulator
-```
- 2. Instantiate the VNC service by running:
- ```bash;
-docker exec --privileged -it androidContainer bash -c "start_vnc.sh"
-```
- 3. Connect to the VNC server via Remmina (installed on CI machine)
-![Snímek obrazovky z 2024-03-25 16-39-35](https://github.com/MateeDevs/ci-setup/assets/31855599/6dbfd2ae-3550-4c76-aaf8-6d199c405aa4)
-
- 4. Open dash terminal in vnc viewer and launch the emulator:
- ```bash;
-./start_emu.sh
-```
-
-![emulator](https://github.com/MateeDevs/ci-setup/assets/31855599/d8a26e60-55ff-4da5-9b7d-e851193832c5)
