@@ -120,8 +120,6 @@ RUN --mount=type=cache,target=/var/cache/butterfree \
        "${ANDROID_SDK_ROOT}/cmdline-tools/latest"; \
     touch /root/.android/repositories.cfg
 
-RUN yes | sdkmanager --licenses >/dev/null
-
 # Lists are comma-separated so Bake can replace all versions with one variable.
 RUN --mount=type=cache,target=/root/.android/cache \
     bash -Eeuo pipefail -c ' \
@@ -130,13 +128,13 @@ RUN --mount=type=cache,target=/root/.android/cache \
         IFS="," read -ra platforms <<< "${ANDROID_PLATFORM_VERSIONS}"; \
         for version in "${build_tools[@]}"; do \
             version="${version//[[:space:]]/}"; \
-            [[ -n "${version}" ]] && packages+=("build-tools;${version}"); \
+            [[ -n "${version}" ]] && packages+=("build-tools/${version}"); \
         done; \
         for version in "${platforms[@]}"; do \
             version="${version//[[:space:]]/}"; \
-            [[ -n "${version}" ]] && packages+=("platforms;android-${version}"); \
+            [[ -n "${version}" ]] && packages+=("platforms/android-${version}"); \
         done; \
-        sdkmanager --install "${packages[@]}"; \
+        android --no-metrics --sdk="${ANDROID_SDK_ROOT}" sdk install "${packages[@]}"; \
         actual="$(adb version | sed -n "s/^Version \\([0-9.]*\\).*/\\1/p" | head -n 1)"; \
         [[ "${actual}" == "${ANDROID_PLATFORM_TOOLS_VERSION}" ]] || { \
             echo "Expected platform-tools ${ANDROID_PLATFORM_TOOLS_VERSION}, installed ${actual}" >&2; \
@@ -183,6 +181,8 @@ ENV EMULATOR_PACKAGE=system-images\;android-${EMULATOR_API_LEVEL}\;${EMULATOR_TA
 
 ENV ANDROID_EMULATOR_VERSION=${ANDROID_EMULATOR_VERSION} \
     MAESTRO_VERSION=${MAESTRO_VERSION} \
+    MAESTRO_CLI_NO_ANALYTICS=true \
+    MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true \
     PATH=/opt/maestro/bin:/usr/local/lib/butterfree/bin:${ANDROID_SDK_ROOT}/emulator:${PATH}
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -229,7 +229,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && fc-cache -f
 
 RUN --mount=type=cache,target=/root/.android/cache \
-    sdkmanager --install "${EMULATOR_PACKAGE}" "emulator" && \
+    android --no-metrics --sdk="${ANDROID_SDK_ROOT}" sdk install \
+        "system-images/android-${EMULATOR_API_LEVEL}/${EMULATOR_TARGET}/${EMULATOR_ARCH}" \
+        "emulator" && \
     actual="$(emulator -version 2>&1 | sed -n 's/^Android emulator version \([0-9.]*\).*/\1/p' | head -n 1)" && \
     case "${actual}" in \
         "${ANDROID_EMULATOR_VERSION}"|"${ANDROID_EMULATOR_VERSION}.0") ;; \
