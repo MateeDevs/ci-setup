@@ -80,9 +80,9 @@ build {
     ]
   }
 
-  # 4. Toolchain Android / Kotlin / Maestro
+  # 4. Android SDK a Maestro
   provisioner "shell" {
-    script = "${path.root}/install-shared-toolchain.sh"
+    script = "${path.root}/install-android-and-maestro.sh"
   }
 
   # 5. GitHub Actions Runner

@@ -5,8 +5,6 @@ set -uo pipefail
 
 # Butterfree build tag: build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-647f9c8f10f3
 # Butterfree emulator tag: emulator-jdk21-sdk36-api34-maestro2.10.0-011cbe0196fb
-gradle_version=9.7.1
-kotlin_version=2.4.10
 maestro_version=2.10.0
 android_cmdline_build=15859902
 android_platform_tools_version=37.0.1
@@ -40,16 +38,6 @@ android="$sdk_dir/cmdline-tools/latest/bin/android"
     platforms/android-37.1 platforms/android-37.0 platforms/android-36.1 platforms/android-36 platforms/android-34 \
     build-tools/37.0.0 build-tools/36.1.0 build-tools/36.0.0 build-tools/35.0.0 build-tools/34.0.0
 
-gradle_archive="gradle-$gradle_version-bin.zip"
-download_verified "https://services.gradle.org/distributions/$gradle_archive" "$staging_dir/gradle.zip" \
-    acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a
-unzip -q "$staging_dir/gradle.zip" -d "$tools_dir"
-
-kotlin_archive="kotlin-native-prebuilt-macos-aarch64-$kotlin_version.tar.gz"
-download_verified "https://github.com/JetBrains/kotlin/releases/download/v$kotlin_version/$kotlin_archive" \
-    "$staging_dir/kotlin.tar.gz" 55ded039bb56a69aec9df354a92b42df9e916104e3c53d8d9852d9cc6617ed9d
-tar -xzf "$staging_dir/kotlin.tar.gz" -C "$tools_dir"
-
 download_verified "https://github.com/mobile-dev-inc/Maestro/releases/download/cli-$maestro_version/maestro.zip" \
     "$staging_dir/maestro.zip" 29b675e10cc12080e445e9bfb2e2b4e4dfb9c0f2e30d5884120d258b5e1cd991
 unzip -q "$staging_dir/maestro.zip" -d "$tools_dir"
@@ -57,7 +45,5 @@ unzip -q "$staging_dir/maestro.zip" -d "$tools_dir"
 cat >>"$HOME/.zprofile" <<EOF
 export ANDROID_HOME="\$HOME/Android/sdk"
 export PATH="\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/build-tools/37.0.0:\$PATH"
-export PATH="\$HOME/.local/share/matee-ci/gradle-$gradle_version/bin:\$PATH"
-export PATH="\$HOME/.local/share/matee-ci/kotlin-native-prebuilt-macos-aarch64-$kotlin_version/bin:\$PATH"
 export PATH="\$HOME/.local/share/matee-ci/maestro/bin:\$PATH"
 EOF
