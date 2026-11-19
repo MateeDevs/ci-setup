@@ -32,6 +32,7 @@ The template supports the following variables:
 - Xcode (customizable version)
 - OpenJDK (customizable version)
 - Android SDK 34
+- GitHub Actions Runner for macOS ARM64, preinstalled at `~/actions-runner`
 - Fastlane
 - SwiftLint
 - Carthage
