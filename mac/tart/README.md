@@ -5,6 +5,7 @@ This directory contains Packer configuration for building macOS Tart VM images f
 ## Structure
 
 - `matee.pkr.hcl` - Packer template for building macOS VM with Xcode, Java, Android SDK, and development tools
+- `install-shared-toolchain.sh` - Pinned Android SDK, Gradle, Kotlin/Native, and Maestro provisioning
 
 ## Prerequisites
 
@@ -31,12 +32,15 @@ The template supports the following variables:
 
 - Xcode (customizable version)
 - OpenJDK (customizable version)
-- Android SDK 34
+- Gradle 9.7.1 and Kotlin/Native 2.4.10
+- Android platforms 37.1, 37.0, 36.1, 36, and 34
+- Android build-tools 37.0.0, 36.1.0, 36.0.0, 35.0.0, and 34.0.0
+- Android command-line tools 22.0 (build 15859902) and platform-tools 37.0.1
 - GitHub Actions Runner for macOS ARM64, preinstalled at `~/actions-runner`
 - Fastlane
 - SwiftLint
 - Carthage
-- Maestro
+- Maestro 2.10.0
 - Mint
 
 ## Usage

@@ -80,17 +80,9 @@ build {
     ]
   }
 
-  # 4. Android SDK 34
+  # 4. Toolchain Android / Kotlin / Maestro
   provisioner "shell" {
-    inline = [
-      "source ~/.zprofile",
-      "brew install --cask android-commandlinetools",
-      "mkdir -p ~/Android/sdk",
-      "echo 'export ANDROID_HOME=\"$HOME/Android/sdk\"' >> ~/.zprofile",
-      "echo 'export PATH=\"$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0:$PATH\"' >> ~/.zprofile",
-      "source ~/.zprofile",
-      "yes | sdkmanager --sdk_root=$ANDROID_HOME --install \"platform-tools\" \"platforms;android-34\" \"build-tools;34.0.0\""
-    ]
+    script = "${path.root}/install-shared-toolchain.sh"
   }
 
   # 5. GitHub Actions Runner
@@ -124,8 +116,6 @@ build {
       "echo '--- Installing Development Tools (Fastlane, SwiftLint) ---'",
       "brew install fastlane swiftlint",
       "brew install carthage unzip zip ca-certificates mint",
-      "brew tap mobile-dev-inc/tap",
-      "brew install mobile-dev-inc/tap/maestro",
       
       "echo 'Final check of disk space:'",
       "df -h /",
