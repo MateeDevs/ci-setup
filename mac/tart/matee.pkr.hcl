@@ -17,6 +17,11 @@ variable "java_version" {
   default = "21"
 }
 
+locals {
+  github_runner_version = "2.338.2"
+  github_runner_sha256  = "25a065af409ffa317ab4d5a3b614dd15fc9c40f2172bc1b35a1b1258e919a388"
+}
+
 source "tart-cli" "tart" {
   vm_base_name = "ghcr.io/cirruslabs/macos-tahoe-base:latest"
   vm_name      = "tarteletRunner-java-${var.java_version}-xcode-${var.xcode_version}"
@@ -75,20 +80,44 @@ build {
     ]
   }
 
-  # 4. Android SDK 34
+  # 4. Android SDK 37.1
   provisioner "shell" {
     inline = [
       "source ~/.zprofile",
       "brew install --cask android-commandlinetools",
       "mkdir -p ~/Android/sdk",
       "echo 'export ANDROID_HOME=\"$HOME/Android/sdk\"' >> ~/.zprofile",
-      "echo 'export PATH=\"$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0:$PATH\"' >> ~/.zprofile",
+      "echo 'export PATH=\"$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/37.0.0:$PATH\"' >> ~/.zprofile",
       "source ~/.zprofile",
-      "yes | sdkmanager --sdk_root=$ANDROID_HOME --install \"platform-tools\" \"platforms;android-34\" \"build-tools;34.0.0\""
+      "android --no-metrics --sdk=\"$ANDROID_HOME\" sdk install \"platform-tools@37.0.1\" \"platforms/android-37.1\" \"build-tools/37.0.0\""
     ]
   }
 
-  # 5. Fastlane, SwiftLint, doplňky a kontrola místa
+  # 5. GitHub Actions Runner
+  provisioner "shell" {
+    inline = [<<-SHELL
+      set -eu
+
+      runner_version="${local.github_runner_version}"
+      archive_name="actions-runner-osx-arm64-$runner_version.tar.gz"
+      staging_dir="$(mktemp -d)"
+      trap 'rm -rf "$staging_dir"' EXIT
+      archive="$staging_dir/$archive_name"
+
+      curl --fail --location --silent --show-error --retry 2 \
+        --output "$archive" "https://github.com/actions/runner/releases/download/v$runner_version/$archive_name"
+      printf '%s  %s\n' '${local.github_runner_sha256}' "$archive" | shasum -a 256 -c -
+
+      mkdir "$staging_dir/actions-runner"
+      tar -xzf "$archive" -C "$staging_dir/actions-runner"
+      test "$("$staging_dir/actions-runner/bin/Runner.Listener" --version)" = "$runner_version"
+      test ! -e "$HOME/actions-runner"
+      mv "$staging_dir/actions-runner" "$HOME/actions-runner"
+    SHELL
+    ]
+  }
+
+  # 6. Fastlane, SwiftLint, doplňky a kontrola místa
   provisioner "shell" {
     inline = [
       "source ~/.zprofile",
