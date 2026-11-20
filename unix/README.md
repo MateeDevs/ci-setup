@@ -6,17 +6,18 @@ versioned Docker images for these jobs.
 
 ## Host
 
+Host versions checked on 2026-11-20.
+
 | Component | Version |
 | --- | --- |
-| Operating system | Ubuntu 22.04 |
-| Kernel | `6.8.0-106-generic` |
+| Operating system | Ubuntu 22.04.5 LTS |
+| Kernel | `6.8.0-138-generic` |
 | Architecture | `x86_64` |
-| Docker client | `29.7.2` |
-| Docker Compose | `5.5.0` |
-| Host Java | `17.0.20` |
+| Docker client | `29.9.2` |
+| Docker Compose | `5.6.1` |
+| Host Java | `17.0.21.0.3` |
 
-The host JDK runs the runner services. Butterfree containers use Java 21 by
-default for Android builds.
+Butterfree containers use their own JDK. The default is Java 21.
 
 Check the host configuration:
 
@@ -90,18 +91,20 @@ Bake commands, and authentication instructions.
 
 ## Use an image in CI
 
-After Butterfree publishes a newer tag, replace the example tag.
+Replace the example tag with a Butterfree tag that matches the exact tool
+versions your build needs. See the [runner overview](../runner/README.md) for
+workflow labels and image selection.
 
 ### GitHub Actions: build
 
 ```yaml
 jobs:
   check:
-    runs-on: [self-hosted, pikachu]
+    runs-on: [self-hosted, matee-android, check]
     container:
       image: mateedevs/butterfree:build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-647f9c8f10f3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: ./gradlew ktlintCheck build
 ```
 
@@ -110,12 +113,12 @@ jobs:
 ```yaml
 jobs:
   ui-test:
-    runs-on: [self-hosted, pikachu]
+    runs-on: [self-hosted, matee-android, check]
     container:
       image: mateedevs/butterfree:emulator-jdk21-sdk37.1-api34-maestro2.9.0-80b2146f404f
       options: --device /dev/kvm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: start_emu_headless.sh
       - run: ./gradlew connectedCheck
 ```
