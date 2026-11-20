@@ -1,23 +1,17 @@
 # Matee CI - macOS - Tart
 
-This directory contains Packer configuration for building macOS Tart VM images for CI/CD runners.
-
-## Structure
-
-- `matee.pkr.hcl` - Packer template for building macOS VM with Xcode, Java, Android SDK, and development tools
+Use `matee.pkr.hcl` to build the macOS runner image with Packer and Tart.
 
 ## Prerequisites
 
-- [Tart](https://github.com/cirruslabs/tart) installed
+- An Apple Silicon Mac with [Tart](https://github.com/cirruslabs/tart) installed
 - [Packer](https://www.packer.io/) installed
-- Xcode `.xip` file downloaded to `~/Downloads/` (e.g., `Xcode_26.2.xip`)
+- The `.xip` for your chosen Xcode version in `~/Downloads/` (e.g., `Xcode_26.2.xip`)
 
 ## Configuration
 
-The template supports the following variables:
-
-- `xcode_version` - Xcode version to install (default: `26.2`)
-- `java_version` - OpenJDK version to install (default: `21`)
+- `xcode_version` defaults to `26.2`.
+- `java_version` defaults to `21`.
 
 ## VM Configuration
 
@@ -30,9 +24,10 @@ The template supports the following variables:
 ## Installed Tools
 
 - Xcode (customizable version)
+- iOS and tvOS simulator runtimes
 - OpenJDK (customizable version)
 - Android SDK 37.1, build-tools 37.0.0, and platform-tools 37.0.1
-- GitHub Actions Runner for macOS ARM64, preinstalled at `~/actions-runner`
+- GitHub Actions Runner 2.338.2 for macOS ARM64 at `~/actions-runner`
 - Fastlane
 - SwiftLint
 - Carthage
@@ -41,9 +36,10 @@ The template supports the following variables:
 
 ## Usage
 
-### Build with default values
+Run these commands from `mac/tart`.
 
 ```bash
+packer init matee.pkr.hcl
 packer build matee.pkr.hcl
 ```
 
@@ -55,4 +51,6 @@ packer build -var="xcode_version=26.1" -var="java_version=17" matee.pkr.hcl
 
 ## Output
 
-The resulting VM image will be named: `tarteletRunner-java-<java_version>-xcode-<xcode_version>`
+Packer names the VM image `tarteletRunner-java-<java_version>-xcode-<xcode_version>`.
+See the [macOS GitHub runner setup](../github/README.md) for registration and
+labels.
