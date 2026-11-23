@@ -65,6 +65,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         locales \
         openjdk-${JAVA_VERSION}-jdk-headless \
         openssh-client \
+        python3 \
+        python3-pip \
+        python3-venv \
+        python3-virtualenv \
         tar \
         unzip \
         wget \
@@ -217,10 +221,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libxrender1 \
         libxshmfence1 \
         libxtst6 \
-        python3 \
-        python3-pip \
-        python3-venv \
-        python3-virtualenv \
         wmctrl \
         x11-utils \
         x11vnc \
