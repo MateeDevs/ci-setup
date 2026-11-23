@@ -127,7 +127,7 @@ RUN --mount=type=cache,target=/var/cache/butterfree \
 # Lists are comma-separated so Bake can replace all versions with one variable.
 RUN --mount=type=cache,target=/root/.android/cache \
     bash -Eeuo pipefail -c ' \
-        packages=("platform-tools"); \
+        packages=(); \
         IFS="," read -ra build_tools <<< "${ANDROID_BUILD_TOOLS_VERSIONS}"; \
         IFS="," read -ra platforms <<< "${ANDROID_PLATFORM_VERSIONS}"; \
         for version in "${build_tools[@]}"; do \
@@ -138,7 +138,14 @@ RUN --mount=type=cache,target=/root/.android/cache \
             version="${version//[[:space:]]/}"; \
             [[ -n "${version}" ]] && packages+=("platforms/android-${version}"); \
         done; \
-        android --no-metrics --sdk="${ANDROID_SDK_ROOT}" sdk install "${packages[@]}"; \
+        if (( ${#packages[@]} )); then \
+            android --no-metrics --sdk="${ANDROID_SDK_ROOT}" sdk install "${packages[@]}"; \
+        fi; \
+        curl --fail --location --retry 3 \
+            --output /tmp/platform-tools.zip \
+            "https://dl.google.com/android/repository/platform-tools_r${ANDROID_PLATFORM_TOOLS_VERSION}-linux.zip"; \
+        unzip -q /tmp/platform-tools.zip -d "${ANDROID_SDK_ROOT}"; \
+        rm /tmp/platform-tools.zip; \
         actual="$(adb version | sed -n "s/^Version \\([0-9.]*\\).*/\\1/p" | head -n 1)"; \
         [[ "${actual}" == "${ANDROID_PLATFORM_TOOLS_VERSION}" ]] || { \
             echo "Expected platform-tools ${ANDROID_PLATFORM_TOOLS_VERSION}, installed ${actual}" >&2; \

@@ -37,8 +37,8 @@ Examples:
   ./butterfree
   ./butterfree --yes --namespace mateedevs
   ./butterfree \
-    --set GRADLE_VERSION=9.7.1 \
-    --set GRADLE_SHA256=acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a
+    --set GRADLE_VERSION=8.11.1 \
+    --set KOTLIN_VERSION=2.2.21
 
 Run fetch-latest-versions.py --help for the complete list of overridable
 variables and checksum requirements.
