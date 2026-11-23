@@ -113,15 +113,16 @@ Example:
   --java-version 21 \
   --set GRADLE_VERSION=8.11.1 \
   --set KOTLIN_VERSION=2.2.21 \
+  --set ANDROID_CMDLINE_TOOLS_VERSION=15859902 \
   --set ANDROID_BUILD_TOOLS_VERSIONS=35.0.0 \
   --set ANDROID_PLATFORM_VERSIONS=36 \
   --set ANDROID_PLATFORM_TOOLS_VERSION=37.0.1
 ```
 
 The resolver fetches official checksums for pinned Gradle and Kotlin versions.
-Explicit checksums are still accepted. Supply a matching checksum when you
-override Android command-line tools or Maestro. Platform-Tools is installed
-from Google's versioned Linux archive.
+Explicit checksums are still accepted. For Android command-line tools and
+Maestro, supply a checksum when you select a version other than the current
+release. Platform-Tools is installed from Google's versioned Linux archive.
 
 | Version variable | Checksum variable |
 | --- | --- |
