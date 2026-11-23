@@ -3,11 +3,11 @@ variable "DOCKERHUB_NAMESPACE" {
 }
 
 variable "BUTTERFREE_IMAGE_TAG" {
-  default = "build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-647f9c8f10f3"
+  default = "build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-8aa9e822956d"
 }
 
 variable "EMULATOR_IMAGE_TAG" {
-  default = "emulator-jdk21-sdk37.1-api34-maestro2.9.0-80b2146f404f"
+  default = "emulator-jdk21-sdk37.1-api34-maestro2.9.0-1f0f2c3c2892"
 }
 
 variable "UBUNTU_VERSION" {

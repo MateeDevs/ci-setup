@@ -12,21 +12,22 @@ Butterfree publishes all images to `mateedevs/butterfree`.
 
 | Tag prefix | Bake target | Contents |
 | --- | --- | --- |
-| `build-` | `butterfree` | Java, Gradle, Kotlin/Native, Android command-line tools, and the three newest stable Android platforms and build-tools |
-| `emulator-` | `emulator` | The build image, API 34 Play Store x86_64 emulator, Maestro, Python, fonts, and VNC tools |
+| `build-` | `butterfree` | Java, Gradle, Kotlin/Native, Python, Android command-line tools, and the three newest stable Android platforms and build-tools |
+| `emulator-` | `emulator` | The build image, API 34 Play Store x86_64 emulator, Maestro, fonts, and VNC tools |
 
 The emulator application programming interface (API) stays at 34 unless you
 set a different value. Each emulator image contains Maestro.
 
 Each tag contains the primary tool versions and a 12-character fingerprint.
-The fingerprint represents all effective versions and archive checksums.
+The fingerprint includes the effective versions, archive checksums, and the
+Dockerfile. The emulator fingerprint also includes its bundled scripts.
 Butterfree does not create a `latest` tag.
 
-Current checked-in examples:
+Default tags for manual Bake builds:
 
 ```text
-mateedevs/butterfree:build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-647f9c8f10f3
-mateedevs/butterfree:emulator-jdk21-sdk37.1-api34-maestro2.9.0-80b2146f404f
+mateedevs/butterfree:build-jdk21-gradle9.7.1-kotlin2.4.10-sdk37.1-8aa9e822956d
+mateedevs/butterfree:emulator-jdk21-sdk37.1-api34-maestro2.9.0-1f0f2c3c2892
 ```
 
 ## Requirements
@@ -121,13 +122,18 @@ Example:
 
 ```bash
 ./butterfree \
-  --set JAVA_VERSION=21 \
-  --set ANDROID_BUILD_TOOLS_VERSIONS=37.0.0,36.1.0,36.0.0 \
-  --set ANDROID_PLATFORM_VERSIONS=37.1,37.0,36.1
+  --java-version 21 \
+  --set GRADLE_VERSION=8.11.1 \
+  --set KOTLIN_VERSION=2.2.21 \
+  --set ANDROID_BUILD_TOOLS_VERSIONS=35.0.0 \
+  --set ANDROID_PLATFORM_VERSIONS=36 \
+  --set ANDROID_PLATFORM_TOOLS_VERSION=37.0.1
 ```
 
-Some tools use archive files. If you set the version of an archive file, also
-set its checksum.
+The resolver fetches official checksums for pinned Gradle and Kotlin versions.
+Explicit checksums are still accepted. Supply a matching checksum when you
+override Android command-line tools or Maestro. Platform-Tools is installed
+from Google's versioned Linux archive.
 
 | Version variable | Checksum variable |
 | --- | --- |

@@ -12,14 +12,16 @@ import shlex
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol, cast
 
 GRADLE_URL = "https://services.gradle.org/versions/current"
-KOTLIN_RELEASE_URL = "https://api.github.com/repos/JetBrains/kotlin/releases/latest"
+KOTLIN_RELEASES_URL = "https://api.github.com/repos/JetBrains/kotlin/releases"
 MAESTRO_RELEASE_URL = (
     "https://api.github.com/repos/mobile-dev-inc/Maestro/releases/latest"
 )
@@ -377,8 +379,9 @@ def parse_args() -> Arguments:
         default=[],
         metavar="NAME=VALUE",
         help=(
-            "override a resolved build variable; repeat as needed. Changing Gradle, "
-            + "Kotlin, Android command-line tools, or Maestro also requires its SHA-256"
+            "override a resolved build variable; repeat as needed. Gradle and Kotlin "
+            + "checksums are fetched automatically unless supplied. Changing Android "
+            + "command-line tools or Maestro also requires its SHA-256"
         ),
     )
     parsed = cast(dict[str, object], vars(parser.parse_args()))
@@ -399,22 +402,48 @@ def parse_args() -> Arguments:
 def main() -> int:
     args = parse_args()
     overrides = parse_overrides(args.overrides)
-    urls = (
-        GRADLE_URL,
-        KOTLIN_RELEASE_URL,
+    gradle_version = overrides.get("GRADLE_VERSION")
+    gradle_sha = overrides.get("GRADLE_SHA256")
+    kotlin_version = overrides.get("KOTLIN_VERSION")
+    kotlin_sha = overrides.get("KOTLIN_NATIVE_SHA256")
+    gradle_url = GRADLE_URL
+    if gradle_version:
+        version = urllib.parse.quote(gradle_version, safe="")
+        gradle_url = f"https://services.gradle.org/distributions/gradle-{version}-bin.zip.sha256"
+    kotlin_url = f"{KOTLIN_RELEASES_URL}/latest"
+    if kotlin_version:
+        version = urllib.parse.quote(kotlin_version, safe="")
+        kotlin_url = f"{KOTLIN_RELEASES_URL}/tags/v{version}"
+
+    urls = [
         MAESTRO_RELEASE_URL,
         ANDROID_STUDIO_URL,
         ANDROID_REPOSITORY_URL,
-    )
+    ]
+    if not (gradle_version and gradle_sha):
+        urls.append(gradle_url)
+    if not (kotlin_version and kotlin_sha):
+        urls.append(kotlin_url)
     with ThreadPoolExecutor(max_workers=len(urls)) as executor:
         responses = dict(zip(urls, executor.map(request_bytes, urls)))
 
-    gradle_version, gradle_sha = resolve_gradle(
-        json_object(responses[GRADLE_URL], "Gradle response")
-    )
-    kotlin_version, kotlin_sha = resolve_kotlin(
-        json_object(responses[KOTLIN_RELEASE_URL], "Kotlin response")
-    )
+    if not gradle_version:
+        gradle_version, gradle_sha = resolve_gradle(
+            json_object(responses[gradle_url], "Gradle response")
+        )
+    elif not gradle_sha:
+        gradle_sha = responses[gradle_url].decode("ascii").strip().lower()
+        if not SHA256_RE.fullmatch(gradle_sha):
+            raise ValueError(f"invalid SHA-256 for gradle-{gradle_version}-bin.zip")
+
+    if not (kotlin_version and kotlin_sha):
+        resolved_version, kotlin_sha = resolve_kotlin(
+            json_object(responses[kotlin_url], "Kotlin response")
+        )
+        if kotlin_version and kotlin_version != resolved_version:
+            raise ValueError(f"expected Kotlin release {kotlin_version}, got {resolved_version}")
+        kotlin_version = resolved_version
+
     maestro_version, maestro_sha = resolve_maestro(
         json_object(responses[MAESTRO_RELEASE_URL], "Maestro response")
     )
@@ -462,6 +491,7 @@ def main() -> int:
     if not platforms_value:
         raise ValueError("ANDROID_PLATFORM_VERSIONS must contain at least one platform")
 
+    recipe_dir = Path(__file__).resolve().parent
     common_identity = {
         "ubuntu": values["UBUNTU_VERSION"],
         "java": values["JAVA_VERSION"],
@@ -474,6 +504,7 @@ def main() -> int:
         "build_tools": values["ANDROID_BUILD_TOOLS_VERSIONS"],
         "platforms": values["ANDROID_PLATFORM_VERSIONS"],
         "platform_tools": values["ANDROID_PLATFORM_TOOLS_VERSION"],
+        "dockerfile_sha256": hashlib.sha256((recipe_dir / "Dockerfile").read_bytes()).hexdigest(),
     }
     emulator_identity = {
         **common_identity,
@@ -484,6 +515,11 @@ def main() -> int:
         "maestro": values["MAESTRO_VERSION"],
         "maestro_sha256": values["MAESTRO_SHA256"],
     }
+    for script in (recipe_dir / "emu_scripts").rglob("*"):
+        if script.is_file():
+            emulator_identity[script.relative_to(recipe_dir).as_posix()] = hashlib.sha256(
+                script.read_bytes()
+            ).hexdigest()
 
     newest_platform = platforms_value[0]
     butterfree_tag = slug(
