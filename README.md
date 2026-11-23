@@ -1,5 +1,7 @@
 # Matee CI/CD server setup
 
 ## Content
-- [macOS](/mac)
-- [unix](/unix)
+
+- [CI runners and workflow labels](runner/README.md)
+- [macOS setup](mac/README.md)
+- [Unix setup](unix/README.md)
