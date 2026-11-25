@@ -11,10 +11,21 @@ packer init matee.pkr.hcl
 packer build matee.pkr.hcl
 ```
 
-Packer looks for each Xcode archive in `~/Downloads/Xcode_<version>.xip`.
-If an archive is missing, Packer uses `xcodes` to download it on the build Mac.
-For downloads, install `xcodes` and set up Apple Developer sign-in for the
-user who runs Packer. [xcodes](https://github.com/XcodesOrg/xcodes)
+Packer uses Xcode archives at `~/Downloads/Xcode_<version>.xip`.
+If an archive is missing, Packer downloads it with `xcodes`.
+To download archives, install `xcodes` on the build Mac.
+Use an Apple Developer account to sign in. [xcodes](https://github.com/XcodesOrg/xcodes)
+
+If Apple asks for a verification code, enter the code in the build terminal.
+If the build has no terminal, download the archives before you start Packer.
+Open a terminal in `mac/tart` on the build Mac. Run this command to download
+the default Xcode versions.
+
+```sh
+./scripts/download-xcode-archives.sh 27.2 26.6
+```
+
+Complete Apple sign-in. Then start the Packer build.
 
 ## Defaults
 
