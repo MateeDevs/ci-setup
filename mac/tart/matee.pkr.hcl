@@ -47,19 +47,19 @@ source "tart-cli" "tart" {
 build {
   sources = ["source.tart-cli.tart"]
 
-  # Download missing Xcode archives on the build Mac.
+  # Check the required archives on the build Mac before uploading them.
   provisioner "shell-local" {
-    script = "${path.root}/scripts/download-xcode-archives.sh"
+    script = "${path.root}/scripts/check-xcode-archives.sh"
     environment_vars = [
       "XCODE_VERSIONS=${join(" ", local.xcode_versions)}",
     ]
   }
 
-  # Upload the Xcode archives.
   provisioner "file" {
     sources     = [for version in local.xcode_versions : pathexpand("~/Downloads/Xcode_${version}.xip")]
     destination = "/Users/admin/Downloads/"
-    generated   = true
+    # Let the local check report missing archives first.
+    generated = true
   }
 
   # Install Xcode and set the default version.

@@ -4,14 +4,12 @@ set -e
 
 downloads_dir="$HOME/Downloads"
 
-# Accept version arguments when run directly from a terminal.
-if [[ $# -gt 0 ]]; then
-  versions=("$@")
-else
-  read -r -a versions <<< "$XCODE_VERSIONS"
+if [[ $# -eq 0 ]]; then
+  echo "Usage: ${0##*/} <version> [<version> ...]" >&2
+  exit 1
 fi
 
-for version in "${versions[@]}"; do
+for version in "$@"; do
   archive="$downloads_dir/Xcode_$version.xip"
   if [[ -f "$archive" ]]; then
     echo "Using $archive"
@@ -30,11 +28,9 @@ for version in "${versions[@]}"; do
     trap 'rm -rf "$staging_dir"' EXIT
 
     echo "Downloading Xcode $version"
-    # Send Apple sign-in prompts to the terminal when one is available.
-    if { exec 3<>/dev/tty; } 2>/dev/null; then
-      xcodes download "$version" --directory "$staging_dir" <&3 >&3 2>&3
-    elif ! xcodes download "$version" --directory "$staging_dir" </dev/null; then
-      echo "Could not download Xcode $version. Run scripts/download-xcode-archives.sh $version from a terminal on the build Mac, then retry the build." >&2
+    if ! xcodes download "$version" --directory "$staging_dir"; then
+      echo "Could not download Xcode $version." >&2
+      echo "You can also download the XIP from https://developer.apple.com/download/all/ and save it as $archive." >&2
       exit 1
     fi
 

@@ -1,31 +1,36 @@
 # macOS Tart runner image
 
-## Build
+Install Tart and Packer on an Apple silicon Mac.
+Run the commands in this guide from `mac/tart`.
+[Tart](https://github.com/cirruslabs/tart) · [Packer](https://www.packer.io/)
 
-1. Install Tart and Packer on an Apple silicon Mac. [Tart](https://github.com/cirruslabs/tart) · [Packer](https://www.packer.io/)
-2. Open a terminal in `mac/tart`.
-3. Run these commands.
+## Get the Xcode archives
 
-```sh
-packer init matee.pkr.hcl
-packer build matee.pkr.hcl
-```
+Save each required archive as `~/Downloads/Xcode_<version>.xip`.
+Packer checks the files before upload. If a file is missing, Packer prints
+a download command for the missing versions and stops.
 
-Packer uses Xcode archives at `~/Downloads/Xcode_<version>.xip`.
-If an archive is missing, Packer downloads it with `xcodes`.
-To download archives, install `xcodes` on the build Mac.
-Use an Apple Developer account to sign in. [xcodes](https://github.com/XcodesOrg/xcodes)
+Install `xcodes` on the build Mac. Run the download script in a terminal.
+Give the script the Xcode versions from your build configuration.
+The script skips files that already exist. [xcodes](https://github.com/XcodesOrg/xcodes)
 
-If Apple asks for a verification code, enter the code in the build terminal.
-If the build has no terminal, download the archives before you start Packer.
-Open a terminal in `mac/tart` on the build Mac. Run this command to download
-the default Xcode versions.
+To get the default versions, run this command.
 
 ```sh
 ./scripts/download-xcode-archives.sh 27.2 26.6
 ```
 
-Complete Apple sign-in. Then start the Packer build.
+If Apple asks for a verification code, enter it in the terminal.
+If you cannot enter the code, use a browser to download the XIP files.
+Save each file in `~/Downloads` with the name shown above.
+[Apple Developer Downloads](https://developer.apple.com/download/all/)
+
+## Build the image
+
+```sh
+packer init matee.pkr.hcl
+packer build matee.pkr.hcl
+```
 
 ## Defaults
 
@@ -36,21 +41,21 @@ Complete Apple sign-in. Then start the Packer build.
 | `java_version` | `21` |
 | `disk_size_gb` | `200` |
 
-Use `-var` to change a default. To install only the primary Xcode, add
+To change a value, use `-var`. To install only the primary Xcode, add
 `-var='additional_xcode_versions=[]'` to the build command.
 
 ## Image
 
-The macOS Tahoe VM has 4 CPU cores and 12 GB of memory.
-The SSH user and password are both `admin`.
+Packer names the image `tarteletRunner-java-<java_version>-xcode-<xcode_version>`.
+The macOS Tahoe VM has 4 CPU cores and 12 GB of memory. The SSH user and
+password are both `admin`.
 
-The VM includes iOS and tvOS simulator runtimes, OpenJDK, Android SDK 37.1,
+The image includes iOS and tvOS simulator runtimes, OpenJDK, Android SDK 37.1,
 Fastlane, SwiftLint, Carthage, Maestro, and Mint.
 
-Packer names the image `tarteletRunner-java-<java_version>-xcode-<xcode_version>`.
-It downloads the latest stable GitHub Actions runner for macOS ARM64.
-It checks the archive's SHA-256 checksum before installing the runner in
-`~/actions-runner`. [Runner registration and labels](../github/README.md)
+Packer downloads the latest stable GitHub Actions runner for macOS ARM64.
+Packer checks the SHA-256 checksum, then installs the runner in `~/actions-runner`.
+[Runner registration and labels](../github/README.md)
 
 ## Select Xcode in GitHub Actions
 
