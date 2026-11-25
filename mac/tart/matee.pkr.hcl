@@ -9,7 +9,17 @@ packer {
 
 variable "xcode_version" {
   type    = string
-  default = "26.2"
+  default = "27.2"
+}
+
+variable "additional_xcode_versions" {
+  type    = list(string)
+  default = ["26.6"]
+}
+
+variable "disk_size_gb" {
+  type    = number
+  default = 200
 }
 
 variable "java_version" {
@@ -18,8 +28,7 @@ variable "java_version" {
 }
 
 locals {
-  github_runner_version = "2.338.2"
-  github_runner_sha256  = "25a065af409ffa317ab4d5a3b614dd15fc9c40f2172bc1b35a1b1258e919a388"
+  xcode_versions = concat([var.xcode_version], var.additional_xcode_versions)
 }
 
 source "tart-cli" "tart" {
@@ -28,7 +37,7 @@ source "tart-cli" "tart" {
   
   cpu_count    = 4
   memory_gb    = 12
-  disk_size_gb = 120
+  disk_size_gb = var.disk_size_gb
   ssh_password = "admin"
   ssh_username = "admin"
   ssh_timeout  = "120s"
@@ -38,99 +47,50 @@ source "tart-cli" "tart" {
 build {
   sources = ["source.tart-cli.tart"]
 
-  # 1. Nahrání Xcode xip
+  # Download missing Xcode archives on the build Mac.
+  provisioner "shell-local" {
+    script = "${path.root}/scripts/download-xcode-archives.sh"
+    environment_vars = [
+      "XCODE_VERSIONS=${join(" ", local.xcode_versions)}",
+    ]
+  }
+
+  # Upload the Xcode archives.
   provisioner "file" {
-    source      = pathexpand("~/Downloads/Xcode_${var.xcode_version}.xip")
-    destination = "/Users/admin/Downloads/Xcode_${var.xcode_version}.xip"
+    sources     = [for version in local.xcode_versions : pathexpand("~/Downloads/Xcode_${version}.xip")]
+    destination = "/Users/admin/Downloads/"
+    generated   = true
   }
 
-  # 2. Instalace xcodes a Xcode
+  # Install Xcode and set the default version.
   provisioner "shell" {
-    inline = [
-      "echo '--- Installing xcodes binary ---'",
-      "curl -L -o xcodes.zip https://github.com/RobotsAndPencils/xcodes/releases/latest/download/xcodes.zip",
-      "unzip xcodes.zip && sudo mv xcodes /usr/local/bin/xcodes && rm xcodes.zip",
-      
-      "echo '--- Setting up Environment ---'",
-      "echo 'export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH' >> ~/.zprofile",
-      "source ~/.zprofile",
-
-      "echo '--- Installing Xcode from local file ---'",
-      "sudo xcodes install ${var.xcode_version} --path /Users/admin/Downloads/Xcode_${var.xcode_version}.xip --select --experimental-unxip --empty-trash",
-
-      "echo '--- Post-install setup ---'",
-      "xcodebuild -downloadPlatform ios",
-      "xcodebuild -downloadPlatform tvOS",
-      "xcodebuild -runFirstLaunch",
-      "sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license",
-      "defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES",
-      "defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES",
-      "defaults write com.apple.dt.Xcode IDEPackageEnablePrebuilts YES"
+    script = "${path.root}/scripts/install-xcode.sh"
+    environment_vars = [
+      "XCODE_VERSIONS=${join(" ", local.xcode_versions)}",
+      "PRIMARY_XCODE_VERSION=${var.xcode_version}",
     ]
   }
 
-  # 3. Java 21
+  # Install Java.
   provisioner "shell" {
-    inline = [
-      "source ~/.zprofile",
-      "brew install openjdk@${var.java_version}",
-      "echo 'export PATH=\"/opt/homebrew/opt/openjdk@${var.java_version}/bin:$PATH\"' >> ~/.zprofile",
-      "echo 'export JAVA_HOME=\"/opt/homebrew/opt/openjdk@${var.java_version}\"' >> ~/.zprofile",
-      "sudo ln -sfn /opt/homebrew/opt/openjdk@${var.java_version}/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-${var.java_version}.jdk"
+    script = "${path.root}/scripts/install-java.sh"
+    environment_vars = [
+      "JAVA_VERSION=${var.java_version}",
     ]
   }
 
-  # 4. Android SDK 37.1
+  # Install the Android SDK.
   provisioner "shell" {
-    inline = [
-      "source ~/.zprofile",
-      "brew install --cask android-commandlinetools",
-      "mkdir -p ~/Android/sdk",
-      "echo 'export ANDROID_HOME=\"$HOME/Android/sdk\"' >> ~/.zprofile",
-      "echo 'export PATH=\"$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/37.0.0:$PATH\"' >> ~/.zprofile",
-      "source ~/.zprofile",
-      "android --no-metrics --sdk=\"$ANDROID_HOME\" sdk install \"platform-tools@37.0.1\" \"platforms/android-37.1\" \"build-tools/37.0.0\""
-    ]
+    script = "${path.root}/scripts/install-android-sdk.sh"
   }
 
-  # 5. GitHub Actions Runner
+  # Install the GitHub Actions runner.
   provisioner "shell" {
-    inline = [<<-SHELL
-      set -eu
-
-      runner_version="${local.github_runner_version}"
-      archive_name="actions-runner-osx-arm64-$runner_version.tar.gz"
-      staging_dir="$(mktemp -d)"
-      trap 'rm -rf "$staging_dir"' EXIT
-      archive="$staging_dir/$archive_name"
-
-      curl --fail --location --silent --show-error --retry 2 \
-        --output "$archive" "https://github.com/actions/runner/releases/download/v$runner_version/$archive_name"
-      printf '%s  %s\n' '${local.github_runner_sha256}' "$archive" | shasum -a 256 -c -
-
-      mkdir "$staging_dir/actions-runner"
-      tar -xzf "$archive" -C "$staging_dir/actions-runner"
-      test "$("$staging_dir/actions-runner/bin/Runner.Listener" --version)" = "$runner_version"
-      test ! -e "$HOME/actions-runner"
-      mv "$staging_dir/actions-runner" "$HOME/actions-runner"
-    SHELL
-    ]
+    script = "${path.root}/scripts/install-github-runner.sh"
   }
 
-  # 6. Fastlane, SwiftLint, doplňky a kontrola místa
+  # Install build tools and check disk space.
   provisioner "shell" {
-    inline = [
-      "source ~/.zprofile",
-      "echo '--- Installing Development Tools (Fastlane, SwiftLint) ---'",
-      "brew install fastlane swiftlint",
-      "brew install carthage unzip zip ca-certificates mint",
-      "brew tap mobile-dev-inc/tap",
-      "brew install mobile-dev-inc/tap/maestro",
-      
-      "echo 'Final check of disk space:'",
-      "df -h /",
-      "export FREE_MB=$(df -m / | awk 'NR==2 {print $4}')",
-      "[[ $FREE_MB -gt 15000 ]] && echo 'Disk space OK' || (echo 'Not enough space!' && exit 1)"
-    ]
+    script = "${path.root}/scripts/install-development-tools.sh"
   }
 }
