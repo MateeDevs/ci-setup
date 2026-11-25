@@ -1,7 +1,8 @@
 #!/bin/bash -e
 
 source ~/.zprofile
-brew install --cask android-commandlinetools
+# Install android for SDK setup and keep sdkmanager available for CI jobs.
+brew install --cask android-cli android-commandlinetools
 
 # Use the runner user's SDK directory and add the SDK tools to PATH.
 mkdir -p ~/Android/sdk
