@@ -40,6 +40,7 @@ packer build matee.pkr.hcl
 | `additional_xcode_versions` | `["26.6"]` |
 | `java_version` | `21` |
 | `disk_size_gb` | `200` |
+| `name_suffix` | `""` |
 
 To change a value, use `-var`. To install only the primary Xcode, add
 `-var='additional_xcode_versions=[]'` to the build command.
@@ -47,6 +48,12 @@ To change a value, use `-var`. To install only the primary Xcode, add
 ## Image
 
 Packer names the image `tarteletRunner-java-<java_version>-xcode-<xcode_version>`.
+Set `name_suffix` to append a hyphen and a suffix to the image name.
+
+```sh
+packer build -var='name_suffix=test' matee.pkr.hcl
+```
+
 The macOS Tahoe VM has 4 CPU cores and 12 GB of memory. The SSH user and
 password are both `admin`.
 

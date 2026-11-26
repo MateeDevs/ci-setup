@@ -27,13 +27,19 @@ variable "java_version" {
   default = "21"
 }
 
+variable "name_suffix" {
+  type    = string
+  default = ""
+}
+
 locals {
   xcode_versions = concat([var.xcode_version], var.additional_xcode_versions)
+  vm_name_suffix = var.name_suffix == "" ? "" : "-${var.name_suffix}"
 }
 
 source "tart-cli" "tart" {
   vm_base_name = "ghcr.io/cirruslabs/macos-tahoe-base:latest"
-  vm_name      = "tarteletRunner-java-${var.java_version}-xcode-${var.xcode_version}"
+  vm_name      = "tarteletRunner-java-${var.java_version}-xcode-${var.xcode_version}${local.vm_name_suffix}"
   
   cpu_count    = 4
   memory_gb    = 12
