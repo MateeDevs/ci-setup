@@ -45,31 +45,46 @@ packer build matee.pkr.hcl
 To change a value, use `-var`. To install only the primary Xcode, add
 `-var='additional_xcode_versions=[]'` to the build command.
 
-## Image
-
-Packer names the image `tarteletRunner-java-<java_version>-xcode-<xcode_version>`.
-Set `name_suffix` to append a hyphen and a suffix to the image name.
+To make Xcode 26.6 the default and keep Xcode 27.2 available, download both
+archives and run this command.
 
 ```sh
-packer build -var='name_suffix=test' matee.pkr.hcl
+packer build -var='xcode_version=26.6' \
+  -var='additional_xcode_versions=["27.2"]' matee.pkr.hcl
+```
+
+## Image
+
+Packer names the image `matee` by default. When you set `name_suffix`, use a
+lowercase Pokémon name. This example creates `matee-swablu`.
+
+```sh
+packer build -var='name_suffix=swablu' matee.pkr.hcl
 ```
 
 The macOS Tahoe VM has 4 CPU cores and 12 GB of memory. The SSH user and
 password are both `admin`.
 
-The image includes iOS and tvOS simulator runtimes, OpenJDK, Android SDK 37.1,
-Fastlane, SwiftLint, Carthage, Maestro, and Mint.
+Packer installs iOS and tvOS simulator runtimes for each Xcode version.
+The image also includes OpenJDK, Android SDK Platform 37.1, Android Build
+Tools 37.0.0, Android Platform Tools 37.0.1, Fastlane, SwiftLint, Carthage,
+Maestro, and Mint.
 
 Packer downloads the latest stable GitHub Actions runner for macOS ARM64.
-Packer checks the SHA-256 checksum, then installs the runner in `~/actions-runner`.
+Packer checks the archive's SHA-256 checksum and the runner version before
+installing it in `~/actions-runner`.
 [Runner registration and labels](../github/README.md)
 
 ## Select Xcode in GitHub Actions
 
-Jobs use the primary Xcode by default. To use Xcode 26.6, add this step before
-the build step in the same job.
+Jobs use the version set by `xcode_version` by default. To use another
+installed version, set `DEVELOPER_DIR` before running any Xcode commands.
+This example uses Xcode 26.6 for later steps in the same job.
 
 ```yaml
 - name: Use Xcode 26.6
-  run: echo "DEVELOPER_DIR=$(/usr/local/bin/xcodes installed 26.6)/Contents/Developer" >> "$GITHUB_ENV"
+  run: |
+    xcode_path=$(/usr/local/bin/xcodes installed 26.6)
+    test -d "$xcode_path/Contents/Developer"
+    echo "DEVELOPER_DIR=$xcode_path/Contents/Developer" >> "$GITHUB_ENV"
 ```

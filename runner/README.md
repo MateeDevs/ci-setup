@@ -17,6 +17,9 @@ List the labels in `runs-on`. Omit `group`. The runner must have all the labels.
 Use `check` for non-urgent internal builds. The separate `release` queue keeps
 store and client releases from waiting behind lint and tests.
 
+To use another installed Xcode version in a job, set `DEVELOPER_DIR` before
+the build. [Select Xcode in GitHub Actions](../mac/tart/README.md#select-xcode-in-github-actions)
+
 ## Android images
 
 Set `container.image` to a Butterfree image with the exact tool versions the
