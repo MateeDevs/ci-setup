@@ -39,8 +39,8 @@ locals {
 
 source "tart-cli" "tart" {
   vm_base_name = "ghcr.io/cirruslabs/macos-tahoe-base:latest"
-  vm_name      = "tarteletRunner-java-${var.java_version}-xcode-${var.xcode_version}${local.vm_name_suffix}"
-  
+  vm_name      = "matee${local.vm_name_suffix}"
+
   cpu_count    = 4
   memory_gb    = 12
   disk_size_gb = var.disk_size_gb
