@@ -345,7 +345,7 @@ def parse_args() -> Arguments:
     parser = argparse.ArgumentParser(
         description="Print latest stable Butterfree versions as environment variables."
     )
-    _ = parser.add_argument("--format", choices=("shell", "env"), default="shell")
+    _ = parser.add_argument("--format", choices=("shell", "env", "json"), default="shell")
     _ = parser.add_argument(
         "--namespace",
         default=os.environ.get("DOCKERHUB_NAMESPACE", "mateedevs"),
@@ -539,6 +539,10 @@ def main() -> int:
     repository = f"{namespace}/butterfree"
     values["BUTTERFREE_IMAGE"] = f"{repository}:{butterfree_tag}"
     values["EMULATOR_IMAGE"] = f"{repository}:{emulator_tag}"
+
+    if args.output_format == "json":
+        print(json.dumps(values))
+        return 0
 
     prefix = "export " if args.output_format == "shell" else ""
     for name, value in values.items():

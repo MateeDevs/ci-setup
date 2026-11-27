@@ -56,21 +56,6 @@ Butterfree reads credentials from the Docker configuration. It supports inline
 credentials. It also supports credential helpers, credential stores, and
 `DOCKER_CONFIG`. Butterfree does not print the username or secret.
 
-For CI, you can use environment variables instead:
-
-```bash
-export DOCKERHUB_USERNAME=mateedevs
-read -rsp "Docker Hub token: " DOCKERHUB_TOKEN
-export DOCKERHUB_TOKEN
-```
-
-Set both variables together. For a personal access token, use the Docker Hub
-username. For an organization access token, use the organization name. The
-environment variables have priority over credentials from `docker login`.
-
-Public tag checks do not require credentials. Private tag checks, image pushes,
-and description updates require credentials.
-
 ### 2. Run Butterfree
 
 Start the interactive workflow:
@@ -87,17 +72,15 @@ Butterfree completes these stages:
 4. Check each tag again and push each missing image.
 5. Show and publish the Docker Hub description and the version tables.
 
-The tag checks run automatically. Butterfree asks for approval before the
-version fetch. It also asks before each applicable operation that changes data.
-A prompt uses `[Y/n]`. Press Enter to approve the operation. Enter `n` to
-decline it.
+Butterfree checks the saved Docker Hub login before it gets tool versions.
+Enter `y` to approve a build, upload, or description update. Press Enter to
+skip the operation.
 
 If a tag check does not give a clear result, Butterfree stops. Butterfree does
 not push a tag that exists. It does not change the tag settings on Docker Hub.
 
-If both tags exist, Butterfree skips the build and push stages. The built
-images stay on the host. Butterfree removes only its temporary files. These
-files contain version data or tag-status data.
+If both tags exist, Butterfree skips the build and upload. The built images
+stay on the host.
 
 For a non-interactive trusted run, use:
 
@@ -112,6 +95,11 @@ To publish to a different Docker Hub user or organization, use:
 ```
 
 The repository name stays `butterfree`.
+
+To retry an upload, use `./butterfree --publish-only TAG`. Use
+`--publish-only TAG` once for each local tag. Use the same namespace as the
+build. This mode skips version resolution, the build, and the description
+update.
 
 ## Set specific versions
 

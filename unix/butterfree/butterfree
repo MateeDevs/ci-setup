@@ -1,253 +1,158 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python3
+"""Build and publish Butterfree images."""
 
-set -Eeuo pipefail
+from __future__ import annotations
 
-readonly BUTTERFREE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-readonly VERSION_RESOLVER="${BUTTERFREE_VERSION_RESOLVER:-${BUTTERFREE_DIR}/fetch-latest-versions.py}"
-readonly DOCKERHUB_HELPER="${BUTTERFREE_DOCKERHUB_HELPER:-${BUTTERFREE_DIR}/../../scripts/dockerhub.py}"
-readonly DOCKER_COMMAND="${BUTTERFREE_DOCKER_COMMAND:-docker}"
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 
-assume_yes=false
-resolver_args=()
-versions_file=""
-tag_status_file=""
+DIRECTORY = Path(__file__).resolve().parent
+sys.path.insert(0, str(DIRECTORY.parents[1] / "scripts"))
 
-usage() {
-    cat <<'EOF'
-Usage: ./butterfree [OPTIONS]
+from publishing import Image, Plan, entry_point, run, validate_namespace, validate_tag, workflow
 
-Interactively resolve versions, skip tags already on Docker Hub, build and push
-missing versioned tags, and update repository descriptions. Built images remain
-available locally.
+SOURCE_URL = "https://github.com/MateeDevs/ci-setup/tree/master/unix/butterfree"
 
-Options:
-  -y, --yes                  Approve all applicable workflow steps
-  --set NAME=VALUE           Override a resolved build variable (repeatable)
-  --namespace NAMESPACE      Docker Hub user or organization (default: mateedevs)
-  --ubuntu-version VERSION   Ubuntu base-image version (default: 22.04)
-  --java-version VERSION     Java major version (default: 21)
-  --emulator-api-level API   Emulator API level (default: 34)
-  --emulator-arch ARCH       Emulator architecture (default: x86_64)
-  --emulator-target TARGET   Emulator system-image target
-  --emulator-name NAME       Android Virtual Device name
-  --emulator-device DEVICE   Android Virtual Device hardware profile
-  -h, --help                 Show this help
 
-Examples:
-  ./butterfree
-  ./butterfree --yes --namespace mateedevs
-  ./butterfree \
-    --set GRADLE_VERSION=8.11.1 \
-    --set KOTLIN_VERSION=2.2.21
+def markdown_table(rows):
+    lines = ["| Component | Version |", "| --- | --- |"]
+    for component, version in rows:
+        version = version.replace("|", r"\|")
+        lines.append(f"| {component} | `{version}` |")
+    return "\n".join(lines)
 
-Run fetch-latest-versions.py --help for the complete list of overridable
-variables and checksum requirements.
-EOF
-}
 
-log() {
-    printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
-}
+def description(settings):
+    common_rows = [
+        ("Ubuntu", settings["UBUNTU_VERSION"]),
+        ("Java", settings["JAVA_VERSION"]),
+        ("Gradle", settings["GRADLE_VERSION"]),
+        ("Kotlin/Native", settings["KOTLIN_VERSION"]),
+        (
+            "Android command-line tools",
+            settings["ANDROID_CMDLINE_TOOLS_VERSION"],
+        ),
+        ("Android platform-tools", settings["ANDROID_PLATFORM_TOOLS_VERSION"]),
+        ("Android build-tools", settings["ANDROID_BUILD_TOOLS_VERSIONS"]),
+        ("Android platforms", settings["ANDROID_PLATFORM_VERSIONS"]),
+    ]
+    emulator_rows = common_rows + [
+        ("Android emulator", settings["ANDROID_EMULATOR_VERSION"]),
+        ("Emulator API", settings["EMULATOR_API_LEVEL"]),
+        ("Emulator target", settings["EMULATOR_TARGET"]),
+        ("Emulator architecture", settings["EMULATOR_ARCH"]),
+        ("Emulator device", settings["EMULATOR_DEVICE"]),
+        ("Maestro", settings["MAESTRO_VERSION"]),
+    ]
 
-confirm() {
-    local prompt=$1
-    local reply
+    summary = "Versioned Android CI images for builds and Maestro emulator testing."
+    variants = [
+        ("Build", settings["BUTTERFREE_IMAGE_TAG"]),
+        ("Emulator with Maestro", settings["EMULATOR_IMAGE_TAG"]),
+    ]
+    variant_lines = ["| Variant | Versioned tag |", "| --- | --- |"]
+    variant_lines.extend(f"| {variant} | `{tag}` |" for variant, tag in variants)
+    emulator_only_rows = emulator_rows[len(common_rows) :]
 
-    if [[ "${assume_yes}" == true ]]; then
-        printf '%s [automatically approved by --yes]\n' "${prompt}"
-        return 0
-    fi
-    if [[ ! -t 0 ]]; then
-        printf 'Cannot request approval without an interactive terminal; use --yes.\n' >&2
-        return 2
-    fi
+    full_description = (
+        "# butterfree\n\n"
+        + "Butterfree supplies Android CI images for builds and emulator tests "
+        + "with Maestro. Select a variant by its versioned tag prefix.\n\n"
+        + "## Current variants\n\n"
+        + "\n".join(variant_lines)
+        + "\n\n## Shared build toolchain\n\n"
+        + markdown_table(common_rows)
+        + "\n\n## Emulator additions\n\n"
+        + markdown_table(emulator_only_rows)
+        + f"\n\n## Source\n\n[Source files and instructions]({SOURCE_URL})\n\n"
+        + "Butterfree generated this description from the effective build "
+        + "configuration.\n"
+    )
+    return summary, full_description
 
-    read -r -p "${prompt} [Y/n] " reply
-    [[ -z "${reply}" || "${reply}" =~ ^[Yy]([Ee][Ss])?$ ]]
-}
 
-remove_temp_files() {
-    if [[ -n "${versions_file}" && -f "${versions_file}" ]]; then
-        rm -f -- "${versions_file}"
-    fi
-    if [[ -n "${tag_status_file}" && -f "${tag_status_file}" ]]; then
-        rm -f -- "${tag_status_file}"
-    fi
-}
 
-trap remove_temp_files EXIT
 
-while (($#)); do
-    case "$1" in
-        -y|--yes)
-            assume_yes=true
-            shift
-            ;;
-        -h|--help)
-            usage
-            exit 0
-            ;;
-        --format|--format=*)
-            printf 'butterfree manages the resolver output format internally; do not pass --format.\n' >&2
-            exit 2
-            ;;
-        *)
-            resolver_args+=("$1")
-            shift
-            ;;
-    esac
-done
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build and publish Butterfree images.",
+        epilog="Build settings: --set NAME=VALUE, --ubuntu-version, --java-version, "
+        "--emulator-api-level, --emulator-arch, --emulator-target, "
+        "--emulator-name, and --emulator-device.",
+        allow_abbrev=False,
+    )
+    parser.add_argument("-y", "--yes", action="store_true", help="Approve all steps.")
+    parser.add_argument("--namespace", default=os.environ.get("DOCKERHUB_NAMESPACE", "mateedevs"))
+    parser.add_argument(
+        "--publish-only", action="append", metavar="TAG",
+        help="Upload a local tag. Use once for each tag.",
+    )
+    args, resolver_args = parser.parse_known_args()
+    options = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    for name in ("ubuntu-version", "java-version", "emulator-api-level", "emulator-arch",
+                 "emulator-target", "emulator-name", "emulator-device"):
+        options.add_argument(f"--{name}")
+    options.add_argument("--set", action="append")
+    options.parse_args(resolver_args)
+    if args.publish_only and resolver_args:
+        parser.error("--publish-only uses local tags. Omit build settings.")
+    namespace = validate_namespace(args.namespace)
+    tags = tuple(dict.fromkeys(validate_tag(tag) for tag in args.publish_only or ()))
+    docker = os.environ.get("BUTTERFREE_DOCKER_COMMAND", "docker")
 
-cd "${BUTTERFREE_DIR}"
+    def resolve(_account):
+        if tags:
+            images = [Image(tag, f"{namespace}/butterfree:{tag}") for tag in tags]
+            rows = []
+            details = None
+            settings = {}
+        else:
+            resolver = os.environ.get("BUTTERFREE_VERSION_RESOLVER", str(DIRECTORY / "fetch-latest-versions.py"))
+            output = subprocess.check_output(
+                [resolver, "--format", "json", "--namespace", namespace, *resolver_args],
+                text=True,
+            )
+            settings = json.loads(output)
+            images = [
+                Image(settings["BUTTERFREE_IMAGE_TAG"], settings["BUTTERFREE_IMAGE"], "butterfree"),
+                Image(settings["EMULATOR_IMAGE_TAG"], settings["EMULATOR_IMAGE"], "emulator"),
+            ]
+            rows = [
+                (label, settings[key])
+                for label, key in (
+                    ("Java", "JAVA_VERSION"),
+                    ("Gradle", "GRADLE_VERSION"),
+                    ("Kotlin/Native", "KOTLIN_VERSION"),
+                    ("Android build tools", "ANDROID_BUILD_TOOLS_VERSIONS"),
+                    ("Android platforms", "ANDROID_PLATFORM_VERSIONS"),
+                    ("Emulator API", "EMULATOR_API_LEVEL"),
+                    ("Maestro", "MAESTRO_VERSION"),
+                )
+            ]
+            details = description(settings)
 
-log "Step 1/5 — resolve tool versions"
-if confirm "Fetch current versions from the official release services?"; then
-    :
-else
-    approval_status=$?
-    ((approval_status == 2)) && exit 2
-    printf 'Version resolution was not approved; stopping.\n'
-    exit 0
-fi
+        def build(missing):
+            run(
+                [docker, "buildx", "bake", "--file", "docker-bake.hcl", "--load",
+                 "--progress=plain", *(image.local for image in missing)],
+                env={**os.environ, **settings},
+            )
 
-versions_file="$(mktemp "${TMPDIR:-/tmp}/butterfree-versions.XXXXXX")"
-"${VERSION_RESOLVER}" "${resolver_args[@]}" > "${versions_file}"
-# The resolver emits shell-quoted export statements and never includes secrets.
-# shellcheck disable=SC1090
-source "${versions_file}"
+        return Plan(
+            images, rows, details, build,
+            lambda image: run([docker, "push", image.ref]),
+            lambda image: run([docker, "image", "inspect", "--format", "{{.Id}}", image.ref],
+                              stdout=subprocess.DEVNULL),
+            "Build the missing images?",
+        )
 
-printf '\nResolved toolchain:\n'
-printf '  Java:             %s\n' "${JAVA_VERSION}"
-printf '  Gradle:           %s\n' "${GRADLE_VERSION}"
-printf '  Kotlin:           %s\n' "${KOTLIN_VERSION}"
-printf '  Android tools:    %s\n' "${ANDROID_BUILD_TOOLS_VERSIONS}"
-printf '  Android platforms:%s\n' "${ANDROID_PLATFORM_VERSIONS}"
-printf '  Emulator/API:     %s / %s\n' "${ANDROID_EMULATOR_VERSION}" "${EMULATOR_API_LEVEL}"
-printf '  Maestro:          %s\n' "${MAESTRO_VERSION}"
-printf '\nImages:\n  %s\n  %s\n' \
-    "${BUTTERFREE_IMAGE}" "${EMULATOR_IMAGE}"
+    os.chdir(DIRECTORY)
+    return workflow("Butterfree", namespace, "butterfree", args.yes, bool(tags), resolve)
 
-declare -a build_targets=()
-declare -a image_refs=()
-dockerhub_auth_source=""
-if dockerhub_auth_source="$("${DOCKERHUB_HELPER}" auth-source)"; then
-    printf 'Docker Hub API credential source: %s\n' "${dockerhub_auth_source}"
-fi
 
-log "Step 2/5 — check Docker Hub tags"
-tag_status_file="$(mktemp "${TMPDIR:-/tmp}/butterfree-tags.XXXXXX")"
-"${DOCKERHUB_HELPER}" check-tags "${DOCKERHUB_NAMESPACE}" \
-    "butterfree=butterfree:${BUTTERFREE_IMAGE_TAG}" \
-    "emulator=butterfree:${EMULATOR_IMAGE_TAG}" > "${tag_status_file}"
-
-checked_count=0
-while IFS='=' read -r target status; do
-    ((checked_count += 1))
-    case "${target}" in
-        butterfree) image_ref=${BUTTERFREE_IMAGE} ;;
-        emulator) image_ref=${EMULATOR_IMAGE} ;;
-        *) printf 'Unexpected Docker Hub check target: %s\n' "${target}" >&2; exit 1 ;;
-    esac
-    case "${status}" in
-        exists) printf '  Exists, skipping: %s\n' "${image_ref}" ;;
-        missing)
-            printf '  Missing:          %s\n' "${image_ref}"
-            build_targets+=("${target}")
-            image_refs+=("${image_ref}")
-            ;;
-        *) printf 'Unexpected Docker Hub check status: %s\n' "${status}" >&2; exit 1 ;;
-    esac
-done < "${tag_status_file}"
-
-if ((checked_count != 2)); then
-    printf 'Docker Hub check returned %s results instead of 2.\n' "${checked_count}" >&2
-    exit 1
-fi
-
-build_status=0
-all_tags_published=true
-log "Step 3/5 — build missing images"
-if ((${#build_targets[@]} == 0)); then
-    printf 'Both versioned tags already exist; no build is needed.\n'
-elif confirm "Build and load ${#build_targets[@]} missing linux/amd64 image(s)?"; then
-    if ! "${DOCKER_COMMAND}" buildx bake --file docker-bake.hcl --load --progress=plain \
-        "${build_targets[@]}"; then
-        build_status=1
-        all_tags_published=false
-        printf 'The image build failed. Upload and description updates will be skipped.\n' >&2
-    fi
-else
-    approval_status=$?
-    ((approval_status == 2)) && exit 2
-    printf 'Build was not approved; stopping.\n'
-    exit 0
-fi
-
-upload_status=0
-log "Step 4/5 — upload missing tags"
-if ((${#image_refs[@]} == 0)); then
-    printf 'All versioned tags already exist; no upload is needed.\n'
-elif ((build_status != 0)); then
-    printf 'Upload skipped because the build failed.\n'
-elif confirm "Push ${#image_refs[@]} new versioned tag(s) to Docker Hub?"; then
-    for index in "${!image_refs[@]}"; do
-        image_ref=${image_refs[index]}
-        target=${build_targets[index]}
-        case "${target}" in
-            butterfree) tag_entry="butterfree=butterfree:${BUTTERFREE_IMAGE_TAG}" ;;
-            emulator) tag_entry="emulator=butterfree:${EMULATOR_IMAGE_TAG}" ;;
-            *) printf 'Unexpected build target: %s\n' "${target}" >&2; exit 1 ;;
-        esac
-        prepush_result="$(
-            "${DOCKERHUB_HELPER}" check-tags "${DOCKERHUB_NAMESPACE}" "${tag_entry}"
-        )"
-        prepush_status=${prepush_result#*=}
-        if [[ "${prepush_status}" == exists ]]; then
-            printf '\nTag appeared during the build; skipping push: %s\n' "${image_ref}"
-            continue
-        fi
-        if [[ "${prepush_status}" != missing ]]; then
-            printf 'Unexpected pre-push Docker Hub status: %s\n' "${prepush_status}" >&2
-            upload_status=1
-            all_tags_published=false
-            break
-        fi
-        printf '\nPushing %s\n' "${image_ref}"
-        if ! "${DOCKER_COMMAND}" push "${image_ref}"; then
-            upload_status=1
-            all_tags_published=false
-            printf 'Upload failed for %s. Remaining tags were not pushed.\n' "${image_ref}" >&2
-            break
-        fi
-    done
-else
-    approval_status=$?
-    ((approval_status == 2)) && exit 2
-    all_tags_published=false
-    printf 'Upload skipped; the built images remain available locally.\n'
-fi
-
-description_status=0
-log "Step 5/5 — update Docker Hub description"
-if [[ "${all_tags_published}" != true ]]; then
-    printf 'Description update skipped because not all resolved tags are published.\n'
-else
-    "${DOCKERHUB_HELPER}" show-descriptions
-    if [[ -z "${dockerhub_auth_source}" ]]; then
-        printf '\nDescription update unavailable: run docker login or set Docker Hub API credentials.\n'
-    elif confirm "Publish this variant and tool-version table to the butterfree repository?"; then
-        if ! "${DOCKERHUB_HELPER}" update-descriptions "${DOCKERHUB_NAMESPACE}"; then
-            description_status=1
-        fi
-    else
-        approval_status=$?
-        ((approval_status == 2)) && exit 2
-        printf 'Docker Hub description update skipped.\n'
-    fi
-fi
-
-if ((build_status != 0 || upload_status != 0 || description_status != 0)); then
-    exit 1
-fi
-
-log "Butterfree finished successfully"
+if __name__ == "__main__":
+    entry_point(main)

@@ -1,181 +1,130 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python3
+"""Build and publish Beautifly images."""
 
-set -euo pipefail
+from __future__ import annotations
 
-cd -- "$(dirname -- "$0")"
-readonly dockerhub=../../scripts/dockerhub.py
-readonly registry=registry-1.docker.io
+import argparse
+from hashlib import sha256
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
 
-unset DOCKERHUB_USERNAME DOCKERHUB_TOKEN
+DIRECTORY = Path(__file__).resolve().parent
+sys.path.insert(0, str(DIRECTORY.parents[1] / "scripts"))
 
-assume_yes=false
-publish_only=false
-namespace=mateedevs
-tag=
-packer_args=()
+from publishing import Image, Plan, entry_point, run, validate_namespace, validate_tag, workflow
 
-usage() {
-    cat <<'HELP'
-Usage: ./beautifly [OPTIONS] [TAG]
+REGISTRY = "registry-1.docker.io"
+TEMPLATE = "matee.pkr.hcl"
+PACKER_VARIABLES = {"xcode_version", "additional_xcode_versions", "java_version", "disk_size_gb"}
 
-Build a Tart VM and publish it to Docker Hub. If the tag exists, skip the
-build and upload. Review the repository description before you update it.
 
-Options:
-  -y, --yes              Approve all steps
-  --namespace NAME       Docker Hub namespace (default: mateedevs)
-  --publish-only         Upload the local VM for this tag
-  --set NAME=VALUE       Set a Packer variable. Use once for each variable.
-  -h, --help             Show this help
+def recipe_tag(settings: str, xcode: str, java: str) -> str:
+    digest = sha256(f"{settings}\n".encode())
+    for path in [Path(TEMPLATE), *sorted(Path("scripts").glob("install-*.sh"))]:
+        checksum = sha256(path.read_bytes()).hexdigest()
+        digest.update(f"{checksum}  {path}\n".encode())
+    return f"xcode{xcode}-jdk{java}-{digest.hexdigest()[:12]}"
 
-If you omit TAG, the script uses the Packer settings and build scripts to
-make a tag. Use a new tag to build with newer tools.
-HELP
-}
 
-while (($#)); do
-    case "$1" in
-        -h|--help) usage; exit 0 ;;
-        -y|--yes) assume_yes=true ;;
-        --publish-only) publish_only=true ;;
-        --namespace)
-            [[ ${2:-} =~ ^[a-z0-9][a-z0-9_-]*$ ]] || { usage >&2; exit 2; }
-            namespace=$2
-            shift
-            ;;
-        --set)
-            case "${2:-}" in
-                xcode_version=*|additional_xcode_versions=*|java_version=*|disk_size_gb=*)
-                    packer_args+=(-var "$2")
-                    ;;
-                *) usage >&2; exit 2 ;;
-            esac
-            shift
-            ;;
-        *)
-            if [[ -n "$tag" || ! "$1" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
-                usage >&2
-                exit 2
-            fi
-            tag=$1
-            ;;
-    esac
-    shift
-done
+def description(image: str, xcodes: list[str], java: str, disk: str) -> tuple[str, str]:
+    return (
+        "macOS Tart runner images for Apple silicon CI",
+        f"""# Beautifly
 
-confirm() {
-    if [[ "$assume_yes" == true ]]; then
-        printf '%s [yes]\n' "$1"
-        return 0
-    fi
-    if [[ ! -t 0 ]]; then
-        echo 'Use --yes if you cannot answer the prompts.' >&2
-        exit 2
-    fi
-    local reply
-    read -r -p "$1 [y/N] " reply && [[ "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]
-}
-
-echo 'Step 1 of 5. Read the Packer settings.'
-settings=$(packer console ${packer_args[@]+"${packer_args[@]}"} matee.pkr.hcl <<'HCL'
-join(" ", concat([var.java_version, format("%v", var.disk_size_gb)], local.xcode_versions))
-HCL
-)
-settings=${settings#\"}
-settings=${settings%\"}
-read -r -a values <<< "$settings"
-version_pattern='^[0-9]+(\.[0-9]+)*$'
-if ((${#values[@]} < 3)); then
-    echo 'Packer must return the Java version, disk size, and at least one Xcode version.' >&2
-    exit 1
-fi
-for value in "${values[@]}"; do
-    if [[ ! "$value" =~ $version_pattern ]]; then
-        printf 'Invalid Packer setting: %s\n' "$value" >&2
-        exit 1
-    fi
-done
-xcode_versions=("${values[@]:2}")
-
-if [[ -z "$tag" ]]; then
-    recipe_hash=$(
-        { printf '%s\n' "$settings"; shasum -a 256 matee.pkr.hcl scripts/install-*.sh; } |
-            shasum -a 256
-    )
-    tag="xcode${xcode_versions[0]}-jdk${values[0]}-${recipe_hash:0:12}"
-fi
-tag_hash=$(printf '%s\n' "$namespace/$tag" | shasum -a 256)
-suffix="beautifly-${tag_hash:0:12}"
-local_vm="matee-$suffix"
-image="$registry/$namespace/beautifly:$tag"
-printf 'Xcode: %s (default: %s)\nJava: %s\nDisk: %s GB\nImage: %s\nLocal VM: %s\n' \
-    "${xcode_versions[*]}" "${xcode_versions[0]}" "${values[0]}" "${values[1]}" "$image" "$local_vm"
-
-check_tag() {
-    local result
-    result=$("$dockerhub" check-tags "$namespace" "beautifly=beautifly:$tag") || return
-    case "$result" in
-        beautifly=exists|beautifly=missing) printf '%s\n' "${result#*=}" ;;
-        *) printf 'Unexpected Docker Hub result: %s\n' "$result" >&2; return 1 ;;
-    esac
-}
-
-echo 'Step 2 of 5. Check the Docker Hub tag.'
-if ! "$dockerhub" auth-source >/dev/null; then
-    echo 'Sign in to Docker Hub with docker login before publishing.' >&2
-    exit 1
-fi
-tag_status=$(check_tag)
-
-echo 'Step 3 of 5. Build the Tart VM.'
-if [[ "$tag_status" == exists ]]; then
-    echo 'The tag already exists. The script will skip the build.'
-elif [[ "$publish_only" == true ]]; then
-    tart get "$local_vm" >/dev/null
-elif confirm "Download missing Xcode archives and build $local_vm?"; then
-    ./scripts/download-xcode-archives.sh "${xcode_versions[@]}"
-    packer init matee.pkr.hcl
-    packer build ${packer_args[@]+"${packer_args[@]}"} -var "name_suffix=$suffix" matee.pkr.hcl
-else
-    exit 0
-fi
-
-echo 'Step 4 of 5. Upload the VM to Docker Hub.'
-if [[ "$tag_status" == exists ]]; then
-    echo 'The tag already exists. The script will skip the upload.'
-elif confirm "Upload $image?"; then
-    tag_status=$(check_tag)
-    if [[ "$tag_status" == missing ]]; then
-        "$dockerhub" push-tart-image "$local_vm" "$namespace" "$tag"
-    else
-        echo 'The tag now exists. The script will skip the upload.'
-    fi
-else
-    printf 'To upload later, use --publish-only %s with the same settings.\n' "$tag"
-    exit 0
-fi
-
-echo 'Step 5 of 5. Update the Docker Hub description.'
-description=$(cat <<DESCRIPTION
-# Beautifly
-
-macOS Tahoe Tart runner templates for Apple silicon CI hosts.
+macOS Tahoe Tart VM images for Apple silicon CI hosts.
 
 | Tool | Configuration |
 | --- | --- |
-| Default Xcode | ${xcode_versions[0]} |
-| Installed Xcode versions | ${xcode_versions[*]} |
-| Java | ${values[0]} |
-| VM disk | ${values[1]} GB |
+| Default Xcode | {xcodes[0]} |
+| Installed Xcode versions | {" ".join(xcodes)} |
+| Java | {java} |
+| VM disk | {disk} GB |
 
-Clone the VM with \`tart clone $image matee-swablu\`.
-Use \`matee-altaria\` if that is the runner name on the CI host.
+Clone the VM with `tart clone {image} matee-swablu`.
+Use `matee-altaria` if that is the runner name on the CI host.
 
-[Build and runner instructions](https://github.com/MateeDevs/ci-setup/tree/master/mac/tart)
-DESCRIPTION
-)
-printf '%s\n' "$description"
-if confirm 'Update the repository description?'; then
-    printf '%s\n' "$description" |
-        "$dockerhub" update-description "$namespace" beautifly 'macOS Tart runner images for Apple silicon CI'
-fi
+[Setup instructions](https://github.com/MateeDevs/ci-setup/tree/master/mac/tart)""",
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument("-y", "--yes", action="store_true", help="Approve all steps.")
+    parser.add_argument("--namespace", default="mateedevs", help="Docker Hub namespace.")
+    parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
+                        help="Set a Packer variable. Use once for each variable.")
+    parser.add_argument("--publish-only", action="store_true", help="Upload the local VM for TAG.")
+    parser.add_argument("tag", nargs="?", metavar="TAG", help="Use this tag for the image.")
+    args = parser.parse_args()
+    if args.publish_only and (not args.tag or args.set):
+        parser.error("--publish-only requires TAG. Omit build settings.")
+
+    namespace = validate_namespace(args.namespace)
+    tag = validate_tag(args.tag) if args.tag else None
+    packer_args = []
+    for setting in args.set:
+        name, separator, _ = setting.partition("=")
+        if not separator or name not in PACKER_VARIABLES:
+            parser.error(f"Invalid Packer setting: {name}")
+        packer_args.extend(["-var", setting])
+
+    def resolve(account):
+        settings_rows = []
+        xcodes = []
+        image_tag = tag
+        if not args.publish_only:
+            settings = subprocess.check_output(
+                ["packer", "console", *packer_args, TEMPLATE],
+                input='join(" ", concat([var.java_version, format("%v", var.disk_size_gb)], local.xcode_versions))\n',
+                text=True,
+            ).strip().removeprefix('"').removesuffix('"')
+            values = settings.split()
+            if len(values) < 3 or any(not re.fullmatch(r"[0-9]+(\.[0-9]+)*", value) for value in values):
+                raise ValueError("Packer must return the Java version, disk size, and Xcode versions.")
+            java, disk, *xcodes = values
+            image_tag = tag or validate_tag(recipe_tag(settings, xcodes[0], java))
+
+        tag_hash = sha256(f"{namespace}/{image_tag}\n".encode()).hexdigest()[:12]
+        suffix = f"beautifly-{tag_hash}"
+        vm = f"matee-{suffix}"
+        image = Image(image_tag, f"{REGISTRY}/{namespace}/beautifly:{image_tag}", vm)
+        details = None
+        if xcodes:
+            settings_rows = [
+                ("Xcode", ", ".join([f"{xcodes[0]} (default)", *xcodes[1:]])),
+                ("Java", java), ("Disk", f"{disk} GB"), ("Local VM", vm),
+            ]
+            details = description(image.ref, xcodes, java, disk)
+
+        def build(_missing):
+            run(["./scripts/download-xcode-archives.sh", *xcodes])
+            run(["packer", "init", TEMPLATE])
+            run(["packer", "build", *packer_args, "-var", f"name_suffix={suffix}", TEMPLATE])
+
+        def upload(target):
+            username, password = account
+            run(
+                ["tart", "push", target.local, target.ref],
+                env={
+                    **os.environ,
+                    "TART_REGISTRY_HOSTNAME": REGISTRY,
+                    "TART_REGISTRY_USERNAME": username,
+                    "TART_REGISTRY_PASSWORD": password,
+                },
+            )
+
+        return Plan(
+            [image], settings_rows, details, build, upload,
+            lambda target: run(["tart", "get", target.local], stdout=subprocess.DEVNULL),
+            "Download missing Xcode archives and build the VM?",
+        )
+
+    os.chdir(DIRECTORY)
+    return workflow("Beautifly", namespace, "beautifly", args.yes, args.publish_only, resolve)
+
+
+if __name__ == "__main__":
+    entry_point(main)

@@ -61,7 +61,8 @@ updated upstream tools when the build configuration and scripts are the same.
 - `./beautifly --yes` approves all steps.
 - `./beautifly --set NAME=VALUE` overrides a Packer setting.
 - `./beautifly --namespace NAME` selects a Docker Hub namespace.
-- `./beautifly --publish-only TAG` retries the push with the original build settings.
+- `./beautifly --publish-only TAG` retries the upload from the local VM. Use the
+  same namespace as the build. This mode skips the description update.
 
 ## Set up a CI host
 
