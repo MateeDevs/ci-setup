@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+cd -- "$(dirname -- "$0")"
+readonly dockerhub=../../scripts/dockerhub.py
+readonly registry=registry-1.docker.io
+
+unset DOCKERHUB_USERNAME DOCKERHUB_TOKEN
+
+assume_yes=false
+publish_only=false
+namespace=mateedevs
+tag=
+packer_args=()
+
+usage() {
+    cat <<'HELP'
+Usage: ./beautifly [OPTIONS] [TAG]
+
+Build a Tart VM and publish it to Docker Hub. If the tag exists, skip the
+build and upload. Review the repository description before you update it.
+
+Options:
+  -y, --yes              Approve all steps
+  --namespace NAME       Docker Hub namespace (default: mateedevs)
+  --publish-only         Upload the local VM for this tag
+  --set NAME=VALUE       Set a Packer variable. Use once for each variable.
+  -h, --help             Show this help
+
+If you omit TAG, the script uses the Packer settings and build scripts to
+make a tag. Use a new tag to build with newer tools.
+HELP
+}
+
+while (($#)); do
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        -y|--yes) assume_yes=true ;;
+        --publish-only) publish_only=true ;;
+        --namespace)
+            [[ ${2:-} =~ ^[a-z0-9][a-z0-9_-]*$ ]] || { usage >&2; exit 2; }
+            namespace=$2
+            shift
+            ;;
+        --set)
+            case "${2:-}" in
+                xcode_version=*|additional_xcode_versions=*|java_version=*|disk_size_gb=*)
+                    packer_args+=(-var "$2")
+                    ;;
+                *) usage >&2; exit 2 ;;
+            esac
+            shift
+            ;;
+        *)
+            if [[ -n "$tag" || ! "$1" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+                usage >&2
+                exit 2
+            fi
+            tag=$1
+            ;;
+    esac
+    shift
+done
+
+confirm() {
+    if [[ "$assume_yes" == true ]]; then
+        printf '%s [yes]\n' "$1"
+        return 0
+    fi
+    if [[ ! -t 0 ]]; then
+        echo 'Use --yes if you cannot answer the prompts.' >&2
+        exit 2
+    fi
+    local reply
+    read -r -p "$1 [y/N] " reply && [[ "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+echo 'Step 1 of 5. Read the Packer settings.'
+settings=$(packer console ${packer_args[@]+"${packer_args[@]}"} matee.pkr.hcl <<'HCL'
+join(" ", concat([var.java_version, format("%v", var.disk_size_gb)], local.xcode_versions))
+HCL
+)
+settings=${settings#\"}
+settings=${settings%\"}
+read -r -a values <<< "$settings"
+version_pattern='^[0-9]+(\.[0-9]+)*$'
+if ((${#values[@]} < 3)); then
+    echo 'Packer must return the Java version, disk size, and at least one Xcode version.' >&2
+    exit 1
+fi
+for value in "${values[@]}"; do
+    if [[ ! "$value" =~ $version_pattern ]]; then
+        printf 'Invalid Packer setting: %s\n' "$value" >&2
+        exit 1
+    fi
+done
+xcode_versions=("${values[@]:2}")
+
+if [[ -z "$tag" ]]; then
+    recipe_hash=$(
+        { printf '%s\n' "$settings"; shasum -a 256 matee.pkr.hcl scripts/install-*.sh; } |
+            shasum -a 256
+    )
+    tag="xcode${xcode_versions[0]}-jdk${values[0]}-${recipe_hash:0:12}"
+fi
+tag_hash=$(printf '%s\n' "$namespace/$tag" | shasum -a 256)
+suffix="beautifly-${tag_hash:0:12}"
+local_vm="matee-$suffix"
+image="$registry/$namespace/beautifly:$tag"
+printf 'Xcode: %s (default: %s)\nJava: %s\nDisk: %s GB\nImage: %s\nLocal VM: %s\n' \
+    "${xcode_versions[*]}" "${xcode_versions[0]}" "${values[0]}" "${values[1]}" "$image" "$local_vm"
+
+check_tag() {
+    local result
+    result=$("$dockerhub" check-tags "$namespace" "beautifly=beautifly:$tag") || return
+    case "$result" in
+        beautifly=exists|beautifly=missing) printf '%s\n' "${result#*=}" ;;
+        *) printf 'Unexpected Docker Hub result: %s\n' "$result" >&2; return 1 ;;
+    esac
+}
+
+echo 'Step 2 of 5. Check the Docker Hub tag.'
+if ! "$dockerhub" auth-source >/dev/null; then
+    echo 'Sign in to Docker Hub with docker login before publishing.' >&2
+    exit 1
+fi
+tag_status=$(check_tag)
+
+echo 'Step 3 of 5. Build the Tart VM.'
+if [[ "$tag_status" == exists ]]; then
+    echo 'The tag already exists. The script will skip the build.'
+elif [[ "$publish_only" == true ]]; then
+    tart get "$local_vm" >/dev/null
+elif confirm "Download missing Xcode archives and build $local_vm?"; then
+    ./scripts/download-xcode-archives.sh "${xcode_versions[@]}"
+    packer init matee.pkr.hcl
+    packer build ${packer_args[@]+"${packer_args[@]}"} -var "name_suffix=$suffix" matee.pkr.hcl
+else
+    exit 0
+fi
+
+echo 'Step 4 of 5. Upload the VM to Docker Hub.'
+if [[ "$tag_status" == exists ]]; then
+    echo 'The tag already exists. The script will skip the upload.'
+elif confirm "Upload $image?"; then
+    tag_status=$(check_tag)
+    if [[ "$tag_status" == missing ]]; then
+        "$dockerhub" push-tart-image "$local_vm" "$namespace" "$tag"
+    else
+        echo 'The tag now exists. The script will skip the upload.'
+    fi
+else
+    printf 'To upload later, use --publish-only %s with the same settings.\n' "$tag"
+    exit 0
+fi
+
+echo 'Step 5 of 5. Update the Docker Hub description.'
+description=$(cat <<DESCRIPTION
+# Beautifly
+
+macOS Tahoe Tart runner templates for Apple silicon CI hosts.
+
+| Tool | Configuration |
+| --- | --- |
+| Default Xcode | ${xcode_versions[0]} |
+| Installed Xcode versions | ${xcode_versions[*]} |
+| Java | ${values[0]} |
+| VM disk | ${values[1]} GB |
+
+Clone the VM with \`tart clone $image matee-swablu\`.
+Use \`matee-altaria\` if that is the runner name on the CI host.
+
+[Build and runner instructions](https://github.com/MateeDevs/ci-setup/tree/master/mac/tart)
+DESCRIPTION
+)
+printf '%s\n' "$description"
+if confirm 'Update the repository description?'; then
+    printf '%s\n' "$description" |
+        "$dockerhub" update-description "$namespace" beautifly 'macOS Tart runner images for Apple silicon CI'
+fi

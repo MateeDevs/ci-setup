@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check Butterfree tags and update Docker Hub repository descriptions."""
+"""Docker Hub publishing helpers for Butterfree and Beautifly."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 HUB_API = "https://hub.docker.com/v2"
-USER_AGENT = "matee-butterfree-dockerhub/1.0"
+USER_AGENT = "matee-ci-setup-dockerhub/1.0"
 SOURCE_URL = "https://github.com/MateeDevs/ci-setup/tree/master"
 DOCKER_HUB_SERVERS = (
     "https://index.docker.io/v1/",
@@ -206,6 +206,25 @@ def auth_source() -> int:
     return 1
 
 
+def push_tart_image(local_vm: str, namespace: str, tag: str) -> int:
+    account = docker_config_credentials()
+    if account is None:
+        raise RuntimeError("Docker Hub credentials were not found; run docker login")
+    username, secret = account
+    host = "registry-1.docker.io"
+    environment = {
+        **os.environ,
+        "TART_REGISTRY_HOSTNAME": host,
+        "TART_REGISTRY_USERNAME": username,
+        "TART_REGISTRY_PASSWORD": secret,
+    }
+    return subprocess.run(
+        ["tart", "push", local_vm, f"{host}/{namespace}/beautifly:{tag}"],
+        env=environment,
+        check=False,
+    ).returncode
+
+
 def access_token(*, required: bool) -> str | None:
     account = credentials(required=required)
     if account is None:
@@ -254,7 +273,7 @@ def check_tags(namespace: str, entries: list[str]) -> int:
             if repository_status == 404:
                 raise RuntimeError(
                     f"Docker Hub repository {namespace}/{repository} does not exist; "
-                    + "Butterfree will not create repositories"
+                    + "create the repository before publishing"
                 )
             if repository_status in (401, 403):
                 raise RuntimeError(
@@ -358,22 +377,27 @@ def repository_descriptions() -> dict[str, tuple[str, str]]:
 
 
 def update_descriptions(namespace: str) -> int:
+    for repository, (summary, full_description) in repository_descriptions().items():
+        update_description(namespace, repository, summary, full_description)
+    return 0
+
+
+def update_description(namespace: str, repository: str, summary: str, full_description: str) -> int:
     token = access_token(required=True)
     if token is None:
         raise RuntimeError("Docker Hub authentication unexpectedly returned no token")
 
-    for repository, (summary, full_description) in repository_descriptions().items():
-        status, _ = request(
-            repository_url(namespace, repository),
-            method="PATCH",
-            token=token,
-            payload={"description": summary, "full_description": full_description},
+    status, _ = request(
+        repository_url(namespace, repository),
+        method="PATCH",
+        token=token,
+        payload={"description": summary, "full_description": full_description},
+    )
+    if status not in (200, 202):
+        raise RuntimeError(
+            f"failed to update {namespace}/{repository} description (HTTP {status})"
         )
-        if status not in (200, 202):
-            raise RuntimeError(
-                f"failed to update {namespace}/{repository} description (HTTP {status})"
-            )
-        print(f"Updated Docker Hub description for {namespace}/{repository}")
+    print(f"Updated Docker Hub description for {namespace}/{repository}")
     return 0
 
 
@@ -389,7 +413,9 @@ def usage() -> None:
         + "  dockerhub.py auth-source\n"
         + "  dockerhub.py check-tags NAMESPACE TARGET=REPOSITORY:TAG [...]\n"
         + "  dockerhub.py show-descriptions\n"
-        + "  dockerhub.py update-descriptions NAMESPACE"
+        + "  dockerhub.py update-descriptions NAMESPACE\n"
+        + "  dockerhub.py update-description NAMESPACE REPOSITORY SUMMARY < DESCRIPTION\n"
+        + "  dockerhub.py push-tart-image LOCAL_VM NAMESPACE TAG"
     )
 
 
@@ -405,6 +431,10 @@ def main(arguments: list[str]) -> int:
         return show_descriptions()
     if arguments[0] == "update-descriptions" and len(arguments) == 2:
         return update_descriptions(arguments[1])
+    if arguments[0] == "update-description" and len(arguments) == 4:
+        return update_description(arguments[1], arguments[2], arguments[3], sys.stdin.read())
+    if arguments[0] == "push-tart-image" and len(arguments) == 4:
+        return push_tart_image(arguments[1], arguments[2], arguments[3])
     usage()
     raise ValueError("invalid Docker Hub helper arguments")
 

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 readonly BUTTERFREE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 readonly VERSION_RESOLVER="${BUTTERFREE_VERSION_RESOLVER:-${BUTTERFREE_DIR}/fetch-latest-versions.py}"
-readonly DOCKERHUB_HELPER="${BUTTERFREE_DOCKERHUB_HELPER:-${BUTTERFREE_DIR}/dockerhub.py}"
+readonly DOCKERHUB_HELPER="${BUTTERFREE_DOCKERHUB_HELPER:-${BUTTERFREE_DIR}/../../scripts/dockerhub.py}"
 readonly DOCKER_COMMAND="${BUTTERFREE_DOCKER_COMMAND:-docker}"
 
 assume_yes=false

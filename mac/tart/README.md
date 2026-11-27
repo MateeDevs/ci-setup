@@ -1,38 +1,20 @@
 # macOS Tart runner image
 
-Install Tart and Packer on an Apple silicon Mac.
-Run the commands in this guide from `mac/tart`.
-[Tart](https://github.com/cirruslabs/tart) · [Packer](https://www.packer.io/)
+Use an Apple silicon Mac with Tart and Packer. Run these commands from `mac/tart`.
 
-## Get the Xcode archives
+## Build locally
 
-Save each required archive as `~/Downloads/Xcode_<version>.xip`.
-Packer checks the files before upload. If a file is missing, Packer prints
-a download command for the missing versions and stops.
-
-Install `xcodes` on the build Mac. Run the download script in a terminal.
-Give the script the Xcode versions from your build configuration.
-The script skips files that already exist. [xcodes](https://github.com/XcodesOrg/xcodes)
-
-To get the default versions, run this command.
+Use `xcodes` to download the archives for the default Xcode versions.
 
 ```sh
 ./scripts/download-xcode-archives.sh 27.2 26.6
-```
-
-If Apple asks for a verification code, enter it in the terminal.
-If you cannot enter the code, use a browser to download the XIP files.
-Save each file in `~/Downloads` with the name shown above.
-[Apple Developer Downloads](https://developer.apple.com/download/all/)
-
-## Build the image
-
-```sh
 packer init matee.pkr.hcl
 packer build matee.pkr.hcl
 ```
 
-## Defaults
+If verification fails in the terminal, download each archive from Apple
+and save it as `~/Downloads/Xcode_<version>.xip`.
+[Apple Developer Downloads](https://developer.apple.com/download/all/)
 
 | Packer variable | Default |
 | --- | --- |
@@ -42,44 +24,63 @@ packer build matee.pkr.hcl
 | `disk_size_gb` | `200` |
 | `name_suffix` | `""` |
 
-To change a value, use `-var`. To install only the primary Xcode, add
-`-var='additional_xcode_versions=[]'` to the build command.
-
-To make Xcode 26.6 the default and keep Xcode 27.2 available, download both
-archives and run this command.
+This build sets Xcode 26.6 as the default and keeps Xcode 27.2 available.
 
 ```sh
 packer build -var='xcode_version=26.6' \
   -var='additional_xcode_versions=["27.2"]' matee.pkr.hcl
 ```
 
-## Image
+Set `additional_xcode_versions=[]` to install only the primary version.
+Use a lowercase Pokémon name for `name_suffix`. For example,
+`name_suffix=beautifly` sets the VM name to `matee-beautifly`.
 
-Packer names the image `matee` by default. When you set `name_suffix`, use a
-lowercase Pokémon name. This example creates `matee-swablu`.
+## Image contents
+
+- macOS Tahoe with 4 CPU cores and 12 GB of memory
+- SSH user and password `admin`
+- iOS and tvOS simulator runtimes for each installed Xcode version
+- OpenJDK, Android SDK Platform 37.1, Build Tools 37.0.0, and Platform Tools 37.0.1
+- Fastlane, SwiftLint, Carthage, Maestro, and Mint
+- Latest stable GitHub Actions runner for macOS ARM64 in `~/actions-runner`
+
+## Publish to Docker Hub
+
+Install the Docker CLI, Python 3, and `xcodes` on the build Mac. Sign in
+with a Docker Hub account that can push to `mateedevs/beautifly` and edit
+its description.
 
 ```sh
-packer build -var='name_suffix=swablu' matee.pkr.hcl
+./beautifly
 ```
 
-The macOS Tahoe VM has 4 CPU cores and 12 GB of memory. The SSH user and
-password are both `admin`.
+Beautifly derives the tag from the build configuration and scripts. If the
+tag exists, it skips the build and push. Use a new tag to rebuild with
+updated upstream tools when the build configuration and scripts are the same.
 
-Packer installs iOS and tvOS simulator runtimes for each Xcode version.
-The image also includes OpenJDK, Android SDK Platform 37.1, Android Build
-Tools 37.0.0, Android Platform Tools 37.0.1, Fastlane, SwiftLint, Carthage,
-Maestro, and Mint.
+- `./beautifly --yes` approves all steps.
+- `./beautifly --set NAME=VALUE` overrides a Packer setting.
+- `./beautifly --namespace NAME` selects a Docker Hub namespace.
+- `./beautifly --publish-only TAG` retries the push with the original build settings.
 
-Packer downloads the latest stable GitHub Actions runner for macOS ARM64.
-Packer checks the archive's SHA-256 checksum and the runner version before
-installing it in `~/actions-runner`.
+## Set up a CI host
+
+Clone the public image with the runner name for the CI host. Use
+`matee-swablu` or `matee-altaria`.
+
+```sh
+tart clone registry-1.docker.io/mateedevs/beautifly:TAG matee-swablu
+```
+
+
+In Tartelet, open **Settings → Virtual Machine** and select the local VM.
+Start the virtual machines from Tartelet to register the runners.
+
 [Runner registration and labels](../github/README.md)
 
 ## Select Xcode in GitHub Actions
 
-Jobs use the version set by `xcode_version` by default. To use another
-installed version, set `DEVELOPER_DIR` before running any Xcode commands.
-This example uses Xcode 26.6 for later steps in the same job.
+Set `DEVELOPER_DIR` to use Xcode 26.6 in later steps of the job.
 
 ```yaml
 - name: Use Xcode 26.6
