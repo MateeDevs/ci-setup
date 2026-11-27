@@ -111,7 +111,10 @@ def main() -> int:
         def upload(target):
             username, password = account
             run(
-                ["tart", "push", target.local, target.ref],
+                [
+                    "tart", "push", "--chunk-size", "16", "--concurrency", "1",
+                    target.local, target.ref,
+                ],
                 env={
                     **os.environ,
                     "TART_REGISTRY_HOSTNAME": REGISTRY,
