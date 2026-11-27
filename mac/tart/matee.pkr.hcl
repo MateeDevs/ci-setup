@@ -68,6 +68,11 @@ build {
     generated = true
   }
 
+  provisioner "file" {
+    source      = "${path.root}/scripts/download-progress.sh"
+    destination = "/tmp/matee-download-progress.sh"
+  }
+
   # Install Xcode and set the default version.
   provisioner "shell" {
     script = "${path.root}/scripts/install-xcode.sh"

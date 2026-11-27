@@ -3,7 +3,8 @@
 source ~/.zprofile
 java_prefix="/opt/homebrew/opt/openjdk@$JAVA_VERSION"
 
-brew install "openjdk@$JAVA_VERSION"
+bash /tmp/matee-download-progress.sh "Install OpenJDK $JAVA_VERSION" \
+  brew install "openjdk@$JAVA_VERSION"
 
 # Set Java for login shells and register the JDK with macOS.
 printf 'export PATH="%s/bin:$PATH"\n' "$java_prefix" >> ~/.zprofile

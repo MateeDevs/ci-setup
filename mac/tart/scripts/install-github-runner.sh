@@ -4,7 +4,8 @@ set -euo pipefail
 
 # Read the version and ARM64 checksum from the same stable release.
 release_metadata="$(
-  curl --fail --location --silent --show-error --retry 2 --max-time 15 \
+  bash /tmp/matee-download-progress.sh 'Get the GitHub Actions runner version' \
+    curl --fail --location --silent --show-error --retry 2 --max-time 15 \
     https://api.github.com/repos/actions/runner/releases/latest |
     /usr/bin/ruby -rjson -e '
       release = JSON.parse(STDIN.read)
@@ -41,7 +42,8 @@ trap cleanup EXIT
 archive="$staging_dir/$archive_name"
 
 echo "Installing GitHub Actions runner $runner_version for macOS ARM64"
-curl --fail --location --silent --show-error --retry 2 \
+bash /tmp/matee-download-progress.sh "Download GitHub Actions runner $runner_version" \
+  curl --fail --location --silent --show-error --retry 2 \
   --output "$archive" "https://github.com/actions/runner/releases/download/v$runner_version/$archive_name"
 printf '%s  %s\n' "$runner_sha256" "$archive" | shasum -a 256 -c -
 

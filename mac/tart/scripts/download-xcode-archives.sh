@@ -3,6 +3,7 @@
 set -e
 
 downloads_dir="$HOME/Downloads"
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 if [[ $# -eq 0 ]]; then
   echo "Usage: ${0##*/} <version> [<version> ...]" >&2
@@ -27,8 +28,8 @@ for version in "$@"; do
     staging_dir="$(mktemp -d "$downloads_dir/.xcodes.XXXXXXXX")"
     trap 'rm -rf "$staging_dir"' EXIT
 
-    echo "Downloading Xcode $version"
-    if ! xcodes download "$version" --directory "$staging_dir"; then
+    if ! bash "$script_dir/download-progress.sh" "Download Xcode $version" \
+      xcodes download "$version" --directory "$staging_dir"; then
       echo "Could not download Xcode $version." >&2
       echo "You can also download the XIP from https://developer.apple.com/download/all/ and save it as $archive." >&2
       exit 1

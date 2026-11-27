@@ -23,7 +23,11 @@ PACKER_VARIABLES = {"xcode_version", "additional_xcode_versions", "java_version"
 
 def recipe_tag(settings: str, xcode: str, java: str) -> str:
     digest = sha256(f"{settings}\n".encode())
-    for path in [Path(TEMPLATE), *sorted(Path("scripts").glob("install-*.sh"))]:
+    for path in [
+        Path(TEMPLATE),
+        *sorted(Path("scripts").glob("install-*.sh")),
+        Path("scripts/download-progress.sh"),
+    ]:
         checksum = sha256(path.read_bytes()).hexdigest()
         digest.update(f"{checksum}  {path}\n".encode())
     return f"xcode{xcode}-jdk{java}-{digest.hexdigest()[:12]}"

@@ -1,14 +1,13 @@
 #!/bin/bash -e
 
 source ~/.zprofile
-echo 'Updating Homebrew'
-brew update
+bash /tmp/matee-download-progress.sh 'Update Homebrew' brew update
 
-echo 'Installing build tools'
-brew install fastlane swiftlint
-brew install carthage unzip zip ca-certificates mint
-brew tap mobile-dev-inc/tap
-brew install mobile-dev-inc/tap/maestro
+bash /tmp/matee-download-progress.sh 'Install Fastlane and SwiftLint' brew install fastlane swiftlint
+bash /tmp/matee-download-progress.sh 'Install additional build tools' brew install carthage unzip zip ca-certificates mint
+bash /tmp/matee-download-progress.sh 'Add the Maestro Homebrew tap' brew tap mobile-dev-inc/tap
+bash /tmp/matee-download-progress.sh 'Install Maestro' brew install mobile-dev-inc/tap/maestro
+rm -f /tmp/matee-download-progress.sh
 
 echo 'Installed build tool versions'
 brew list --versions fastlane swiftlint carthage unzip zip ca-certificates mint mobile-dev-inc/tap/maestro
